@@ -1,0 +1,25 @@
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+UserSettings/
+MemoryCaptures/
+
+BlokDunyası_BurstDebugInformation_DoNotShip/
+Blok Dünyası_BackUpThisFolder_ButDontShipItWithYourGame/
+
+*.csproj
+*.sln
+*.slnx
+*.unityproj
+*.user
+*.userprefs
+*.suo
+
+# Build artifacts
+*.apk
+*.aab
+
+.DS_Store

@@ -1,0 +1,20 @@
+[FILE] Assembly-CSharp-Editor.csproj
+[FILE] Assembly-CSharp.csproj
+[DIR] Assets
+[FILE] BlockPuzzleCore.csproj
+[FILE] BlockPuzzleTests.csproj
+[FILE] Blok Dünyası.apk
+[DIR] Blok Dünyası_BackUpThisFolder_ButDontShipItWithYourGame
+[FILE] BlokDunyasi.slnx
+[FILE] BlokDunyası.slnx
+[DIR] BlokDunyası_BurstDebugInformation_DoNotShip
+[DIR] Library
+[DIR] Logs
+[DIR] Packages
+[DIR] ProjectSettings
+[FILE] README.md
+[DIR] Temp
+[DIR] Tests
+[DIR] UserSettings
+[FILE] gradle.properties
+[FILE] project_tree_assets.txt

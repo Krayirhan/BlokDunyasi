@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1ea76e2aa2e395840b6a4993a89ce497, type: 3}
+  m_Name: BlockSpriteConfig
+  m_EditorClassIdentifier: Assembly-CSharp::BlockPuzzle.UnityAdapter.Configuration.BlockSpriteConfig
+  blockSprites:
+  - {fileID: -5028462343382155263, guid: 253ba1104766e8045ab538fd2304147d, type: 3}
+  - {fileID: -5067010914806527812, guid: 7b3fabb82e4cafb4ca2c945de4a175f3, type: 3}
+  - {fileID: 2260687111295844900, guid: df5274928f942a84bb01f32e73dac8c3, type: 3}
+  - {fileID: -1481347420795103835, guid: 4ff3c3edeba38634d823c8d0eeba1e37, type: 3}
+  - {fileID: -5848603901966331108, guid: 614c60b68f54f9a48a6807b477480cee, type: 3}
+  - {fileID: -4051193170096935219, guid: f84f7b98438b83441b410bc4f0fa9a1f, type: 3}
+  - {fileID: -8358508069005698184, guid: a248a984801a98546a579d30de8a8145, type: 3}
+  - {fileID: -2791759622872234588, guid: b7a9765199b14ea4b8c17da66b7c5c1a, type: 3}
+  emptyCellSprite: {fileID: 3396017925731008176, guid: 93dbe75d94f7acf48a9f76b8f51f6459, type: 3}
+  filledCellSprite: {fileID: 7905411461583814485, guid: 391e2af4353e02e489c29fc1c6cd6732, type: 3}
+  previewValidSprite: {fileID: -1457657474930126242, guid: bc36c35bedd401a418b2a6d64e9b6262, type: 3}
+  previewInvalidSprite: {fileID: -7946627018688317337, guid: cc35cc206a23dc74491e30b4ccb87691, type: 3}
+  cellPrefab: {fileID: 4713668258459325710, guid: 5c86291d10a8d1949acf171322db6e97, type: 3}
+  blockCellPrefab: {fileID: 5200682108612802880, guid: e11976442fbc60c429e1e7f19e2944c9, type: 3}

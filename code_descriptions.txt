@@ -1,0 +1,96 @@
+Assets/Editor/MainMenuSceneSetup.cs - Create a new scene.
+Assets/Editor/SettingsScreenSetup.cs - Editor script: creates a production-ready Settings scene with named UI elements.
+Assets/Scripts/Core/Board/BoardCoord.cs - /// Static coordinate utilities for board operations. /// Provides allocation-free coordinate conversion and enumeration utilities. /// /// Grid coordinate system: /// - Origin: bottom-left (0,0) /// - X axis: increases to the right /// - Y axis: increases upward /// - Board size: width x height.
+Assets/Scripts/Core/Board/BoardState.cs - /// Represents the current state of the game board. /// Uses 1D array storage for performance with row/column count tracking. /// /// Grid origin: bottom-left (0,0), x increases right, y increases up. /// /// Invariants: /// - _rowCounts[y] == number of filled cells in row y /// - _colCounts[x] == number of filled cells in column x /// - _cells.Length == Width * Height.
+Assets/Scripts/Core/Board/BoardValidator.cs - /// Debug validation utilities for BoardState integrity. /// These methods perform O(width * height) validation by /// re-scanning the entire board, so they should only be used for debugging.
+Assets/Scripts/Core/Board/CellState.cs - /// Represents the state of a single cell in the game board. /// Uses struct for performance with large arrays. /// /// Invariants: /// - When BlockId=0: cell is empty /// - When BlockId>0: cell is filled with colorId>0.
+Assets/Scripts/Core/Board/LineClearer.cs - /// Result of a line clearing operation.
+Assets/Scripts/Core/Board/LineDetectResult.cs - /// Result of line detection operation, designed for allocation-free reuse. /// Uses internal buffers to avoid per-call allocations.
+Assets/Scripts/Core/Board/LineDetector.cs - /// Efficient line detection using pre-computed row/column counts. /// Achieves O(width + height) performance by leveraging BoardState's count tracking. /// Reuses internal buffer to avoid allocations on repeated calls.
+Assets/Scripts/Core/Board/PlacementEngine.cs - /// Result of a placement validation or placement attempt.
+Assets/Scripts/Core/Board/PlacementSearch.cs - /// Optimized search engine for finding valid shape placements on the board. /// Used for game-over detection and placement validation. /// /// Complexity: /// - Without bounds optimization: O(shapes * board_area * shape_size) /// - With bounds optimization: O(shapes * valid_anchor_positions * shape_size) /// /// The bounds optimization significantly reduces the search space by only /// checking anchor positions where the shape could theoretically fit.
+Assets/Scripts/Core/Board/PlacementSearchResult.cs - /// Result of a placement search operation. /// Indicates whether a valid placement was found and provides the details.
+Assets/Scripts/Core/Board/ShapeBounds.cs - /// Represents the bounding box of a shape defined by its offsets. /// Used for optimizing placement search by restricting anchor positions.
+Assets/Scripts/Core/Common/Int2.cs - /// 2D integer vector for grid positions and offsets. /// Pure C# implementation without Unity dependencies.
+Assets/Scripts/Core/Engine/ActiveBlocks.cs - /// Manages the set of currently active (unplaced) blocks available to the player. /// Uses FIXED 3 SLOTS - slot index never changes, null means slot is empty.
+Assets/Scripts/Core/Engine/GameConfig.cs - /// Configuration for game engine initialization.
+Assets/Scripts/Core/Engine/GameEngine.cs - /// Main game engine orchestrating all game systems. /// Handles move validation, execution, scoring, and game state transitions. /// Uses static utility classes for placement, detection, and clearing.
+Assets/Scripts/Core/Engine/GameState.cs - /// Complete game state including board, score, active blocks, and game status. /// Immutable structure for safe state management and undo/redo support.
+Assets/Scripts/Core/Game/MoveResult.cs - /// Result of a shape placement attempt.
+Assets/Scripts/Core/Persistence/BestScoreStore.cs - /// Persistent storage for best score using IStorageProvider.
+Assets/Scripts/Core/Persistence/GameData.cs - /// Serializable representation of complete game state for persistence. /// Contains all necessary data to restore a game session.
+Assets/Scripts/Core/Persistence/GameSettings.cs - /// Player preferences and game settings.
+Assets/Scripts/Core/Persistence/GameStateStore.cs - /// Persistent storage for game state (save/load functionality).
+Assets/Scripts/Core/Persistence/GameStatistics.cs - /// Player statistics and achievements tracking.
+Assets/Scripts/Core/Persistence/IBestScoreStore.cs - /// Interface for storing best scores.
+Assets/Scripts/Core/Persistence/IGameDataProvider.cs - /// Interface for persisting and loading game data. /// Abstracts away storage implementation (PlayerPrefs, files, cloud, etc.).
+Assets/Scripts/Core/Persistence/IJsonSerializer.cs - /// Interface for JSON serialization. /// Abstracts away serialization implementation (JsonUtility, Newtonsoft, etc.).
+Assets/Scripts/Core/Persistence/IStorageProvider.cs - /// Interface for persistent storage operations. /// Abstracts away storage implementation (PlayerPrefs, files, cloud, etc.).
+Assets/Scripts/Core/Persistence/SettingsStore.cs - /// Persistent storage for game settings.
+Assets/Scripts/Core/Persistence/StatisticsStore.cs - /// Persistent storage for game statistics.
+Assets/Scripts/Core/RNG/BlockSpawner.cs - /// Manages spawning of block sets with adaptive difficulty and safety checks. /// Ensures players always have at least one placeable block when possible.
+Assets/Scripts/Core/RNG/DifficultyModel.cs - /// Adaptive difficulty model that adjusts shape complexity based on player performance. /// Tracks metrics and modifies spawning weights to maintain engagement.
+Assets/Scripts/Core/RNG/SeededRng.cs - /// Seeded random number generator for deterministic, reproducible randomness. /// Uses System.Random internally but provides a clean interface for game logic.
+Assets/Scripts/Core/RNG/WeightedPicker.cs - /// Generic weighted selection utility using cumulative distribution. /// Thread-safe for read operations, not thread-safe for modifications.
+Assets/Scripts/Core/Rules/ComboState.cs - /// Tracks the current combo state for scoring multipliers. /// /// Rules: /// - Combo resets when no lines are cleared in a move /// - Combo increases when lines are cleared /// - Multiplier is based on combo streak.
+Assets/Scripts/Core/Rules/ScoreResult.cs - /// Result of a scoring calculation for a move. /// Contains all scoring-related information for UI and game state updates.
+Assets/Scripts/Core/Rules/ScoringRules.cs - /// Defines the scoring rules for the Blok Dünyası game. /// /// Scoring Formula: /// - Base: 10 points per cleared line /// - Line Clear Multiplier: 1 + (simultaneous_lines - 1) * 0.5 /// - Combo Multiplier: Applied from ComboState /// - Final Score = Base * LineClearMultiplier * ComboMultiplier /// /// Examples: /// - 1 line: 10 * 1.0 = 10 points /// - 2 lines: 20 * 1.5 = 30 points /// - 3 lines: 30 * 2.0 = 60 points /// - Plus combo multipliers on top.
+Assets/Scripts/Core/Shapes/ShapeBoundsCache.cs - /// Cached bounding box information for a shape. /// Computed once to optimize placement search operations. /// /// Unity-friendly: immutable value type, no heap allocations after creation.
+Assets/Scripts/Core/Shapes/ShapeDefinition.cs - /// Immutable definition of a shape with its ID, name, and cell offsets. /// /// Invariants: /// - Must contain at least one offset /// - Must include (0,0) as the anchor point /// - No duplicate offsets allowed /// - Offsets represent relative positions from the anchor.
+Assets/Scripts/Core/Shapes/ShapeId.cs - /// Unique identifier for a shape type. /// Immutable value type for efficient comparison and hashing.
+Assets/Scripts/Core/Shapes/ShapeLibrary.cs - /// Built-in library of common Blok Dünyası shapes. /// Provides deterministic access to standard shapes with unique IDs.
+Assets/Scripts/Editor/BlockShapeCreator.cs - /// Difficulty levels for block shapes.
+Assets/Scripts/Editor/GameSetup.cs - /// OYUN SİSTEMİ KURULUM ARACI /// Menu: BlokDunyasi > Setup.
+Assets/Scripts/SettingsScreenSetup.cs - Placeholder runtime helper. The Editor script (Assets/Editor/SettingsScreenSetup.cs).
+Assets/Scripts/UI/SettingsManager.cs - PlayerPrefs keys.
+Assets/Scripts/UnityAdapter/Blocks/NewBlockTray.cs - /// YENİ TEMİZ BLOCK TRAY SİSTEMİ /// NewSimpleBlock ile çalışır.
+Assets/Scripts/UnityAdapter/Blocks/NewSimpleBlock.cs - /// YENİ TEMİZ BLOCK SİSTEMİ /// /// KRİTİK FARK: /// - Eski sistem: Şekil görsel olarak MERKEZLENİYORDU (centerOffset) /// - Yeni sistem: (0,0) ANCHOR hücresi block transform'un MERKEZİNDE /// /// Bu sayede: pointer pozisyonu = block pozisyonu = anchor grid pozisyonu /// Hiç offset hesaplaması gerekmez!.
+Assets/Scripts/UnityAdapter/Boot/GameBootstrap.cs - /// Get current available shapes for UI components that may have missed the initial event. /// Used by NewBlockTray to handle Start() order race condition.
+Assets/Scripts/UnityAdapter/Boot/GameLaunchState.cs - GameLaunchState class definition.
+Assets/Scripts/UnityAdapter/Components/SimpleCell.cs - /// Minimal cell wrapper for SpriteRenderer.
+Assets/Scripts/UnityAdapter/Configuration/BlockSpriteConfig.cs - /// ScriptableObject for centralized sprite management. /// Create via: Assets → Create → Blok Dünyası → Sprite Config.
+Assets/Scripts/UnityAdapter/Grid/SimpleGridView.cs - /// Basit, temiz grid sistemi. Tek sorumluluk: Grid görselleştirme ve world<->grid dönüşümü.
+Assets/Scripts/UnityAdapter/Input/NewDragSystem.cs - /// YENİ TEMİZ DRAG SİSTEMİ /// /// Temel Prensipler: /// 1. Blok sürüklenirken, bloğun (0,0) anchor hücresi pointer'ın olduğu yere gider /// 2. Grid pozisyonu hesaplanırken visual lift KULLANILMAZ (sadece görsel) /// 3. Preview ve placement AYNI koordinatları kullanır /// 4. Tüm dönüşümler SimpleGridView üzerinden yapılır.
+Assets/Scripts/UnityAdapter/Input/NewPreviewSystem.cs - /// YENİ TEMİZ PREVIEW SİSTEMİ /// /// Temel Prensipler: /// 1. Preview hücreleri grid hücrelerinin TAM ÜSTÜNE yerleşir /// 2. Anchor (0,0) + tüm offset'ler gösterilir /// 3. Yeşil = yerleştirilebilir, Kırmızı = yerleştirilemez.
+Assets/Scripts/UnityAdapter/MobileOptimizer.cs - /// Mobile performance optimizations for Blok Dünyası.
+Assets/Scripts/UnityAdapter/UI/GameOverView.cs - /// GameOver ekranını yönetir. /// Script GameOverPanel üzerinde duruyorsa panel kapalıyken Start() çalışmayabilir; /// bu yüzden event subscribe ve button binding Awake() içinde yapılır.
+Assets/Scripts/UnityAdapter/UI/HighScoreTableView.cs - HighScoreTableView class definition.
+Assets/Scripts/UnityAdapter/UI/HudView.cs - /// Manages the heads-up display showing score, best score, and game information.
+Assets/Scripts/UnityAdapter/UI/MainMenuController.cs - MainMenuController class definition.
+Assets/Scripts/UnityAdapter/UI/UIController.cs - /// Controls all UI elements.
+Assets/Scripts/UnityAdapter/UnityAdapters.cs - /// PlayerPrefs-based storage provider.
+Assets/Scripts/UnityAdapter/UnityPlayerPrefsDataProvider.cs - /// Unity PlayerPrefs implementation of IGameDataProvider. /// Preferred Unity entrypoint; wraps GameStateStore/SettingsStore/StatisticsStore.
+Assets/TextMesh Pro/Examples & Extras/Scripts/Benchmark01.cs - private string m_string;.
+Assets/TextMesh Pro/Examples & Extras/Scripts/Benchmark01_UGUI.cs - private TextContainer m_textContainer;.
+Assets/TextMesh Pro/Examples & Extras/Scripts/Benchmark02.cs - TextMesh Pro Implementation.
+Assets/TextMesh Pro/Examples & Extras/Scripts/Benchmark03.cs - Create Dynamic Font Asset for the given font file.
+Assets/TextMesh Pro/Examples & Extras/Scripts/Benchmark04.cs - private TextMeshProFloatingText floatingText_Script;.
+Assets/TextMesh Pro/Examples & Extras/Scripts/CameraController.cs - Controls for Touches on Mobile devices.
+Assets/TextMesh Pro/Examples & Extras/Scripts/ChatController.cs - Clear Input Field.
+Assets/TextMesh Pro/Examples & Extras/Scripts/DropdownSample.cs - DropdownSample class definition.
+Assets/TextMesh Pro/Examples & Extras/Scripts/EnvMapAnimator.cs - private Vector3 TranslationSpeeds;.
+Assets/TextMesh Pro/Examples & Extras/Scripts/ObjectSpin.cs - Update is called once per frame.
+Assets/TextMesh Pro/Examples & Extras/Scripts/ShaderPropAnimator.cs - Cache a reference to object's renderer.
+Assets/TextMesh Pro/Examples & Extras/Scripts/SimpleScript.cs - private TMP_FontAsset m_FontAsset;.
+Assets/TextMesh Pro/Examples & Extras/Scripts/SkewTextExample.cs - /// Method to curve text along a Unity animation curve.
+Assets/TextMesh Pro/Examples & Extras/Scripts/TMP_DigitValidator.cs - /// EXample of a Custom Character Input Validator to only allow digits from 0 to 9.
+Assets/TextMesh Pro/Examples & Extras/Scripts/TMP_ExampleScript_01.cs - private TMP_InputField m_inputfield;.
+Assets/TextMesh Pro/Examples & Extras/Scripts/TMP_FrameRateCounter.cs - m_TextMeshPro.FontColor = new Color32(255, 255, 255, 128);.
+Assets/TextMesh Pro/Examples & Extras/Scripts/TMP_PhoneNumberValidator.cs - /// Example of a Custom Character Input Validator to only allow phone number in the (800) 555-1212 format.
+Assets/TextMesh Pro/Examples & Extras/Scripts/TMP_TextEventCheck.cs - Get a reference to the text component.
+Assets/TextMesh Pro/Examples & Extras/Scripts/TMP_TextEventHandler.cs - /// Event delegate triggered when pointer is over a character.
+Assets/TextMesh Pro/Examples & Extras/Scripts/TMP_TextInfoDebugTool.cs - /// Method to draw a rectangle around each character.
+Assets/TextMesh Pro/Examples & Extras/Scripts/TMP_TextSelector_A.cs - Force generation of the text object so we have valid data to work with. This is needed since LateUpdate() will be called before the text object has a chance to generated when entering play mode.
+Assets/TextMesh Pro/Examples & Extras/Scripts/TMP_TextSelector_B.cs - Flags.
+Assets/TextMesh Pro/Examples & Extras/Scripts/TMP_UiFrameRateCounter.cs - display two fractional digits (f2 format).
+Assets/TextMesh Pro/Examples & Extras/Scripts/TMPro_InstructionOverlay.cs - private FpsCounterAnchorPositions last_AnchorPosition;.
+Assets/TextMesh Pro/Examples & Extras/Scripts/TeleType.cs - [Range(0, 100)].
+Assets/TextMesh Pro/Examples & Extras/Scripts/TextConsoleSimulator.cs - /// Method revealing the text one character at a time.
+Assets/TextMesh Pro/Examples & Extras/Scripts/TextMeshProFloatingText.cs - private int m_frame = 0;.
+Assets/TextMesh Pro/Examples & Extras/Scripts/TextMeshSpawner.cs - TextMesh Pro Implementation.
+Assets/TextMesh Pro/Examples & Extras/Scripts/VertexColorCycler.cs - /// Method to animate vertex colors of a TMP Text object.
+Assets/TextMesh Pro/Examples & Extras/Scripts/VertexJitter.cs - /// Structure to hold pre-computed animation data.
+Assets/TextMesh Pro/Examples & Extras/Scripts/VertexShakeA.cs - /// Method to animate vertex colors of a TMP Text object.
+Assets/TextMesh Pro/Examples & Extras/Scripts/VertexShakeB.cs - /// Method to animate vertex colors of a TMP Text object.
+Assets/TextMesh Pro/Examples & Extras/Scripts/VertexZoom.cs - /// Method to animate vertex colors of a TMP Text object.
+Assets/TextMesh Pro/Examples & Extras/Scripts/WarpTextExample.cs - /// Method to curve text along a Unity animation curve.

@@ -1,0 +1,29 @@
+Assets/Scenes/MainMenu.unity
+- EventSystem
+- Main Camera
+- MainMenuController
+
+Assets/Scenes/OyunEkranı.unity
+- SimpleBlockTray
+- Main Camera
+- SimpleInputController
+- Global Light 2D
+- EventSystem
+- SimpleGridView
+- GameManager
+- PlacementPreview
+- MobileOptimizer
+
+Assets/Scenes/Scores.unity
+- EventSystem
+- Footer
+- Main Camera
+- MainMenuController
+
+Assets/Scenes/Settings.unity
+- EventSystem
+- Main Camera
+- Ses_Card
+  - "B\xF6l\xFCc\xFC"
+  - ic_music_128_0
+  - ic_speaker_64_0
