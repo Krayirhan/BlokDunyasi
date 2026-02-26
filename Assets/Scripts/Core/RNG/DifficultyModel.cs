@@ -55,6 +55,24 @@ namespace BlockPuzzle.Core.RNG
         /// Overall success rate across all tracked placements.
         /// </summary>
         public float OverallSuccessRate => _totalPlacements > 0 ? (float)_successfulPlacements / _totalPlacements : 0f;
+
+        /// <summary>
+        /// Returns recent placement history in chronological order (oldest to newest).
+        /// </summary>
+        public bool[] GetRecentPlacementHistorySnapshot()
+        {
+            if (_recentPlacementHistory.Count == 0)
+                return Array.Empty<bool>();
+
+            var history = new bool[_recentPlacementHistory.Count];
+            int index = 0;
+            foreach (var value in _recentPlacementHistory)
+            {
+                history[index++] = value;
+            }
+
+            return history;
+        }
         
         public DifficultyModel(float initialDifficulty = 0.3f, int historySize = 20)
         {

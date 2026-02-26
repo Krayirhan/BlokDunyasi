@@ -13,34 +13,45 @@ namespace BlockPuzzle.Core.Game
         public bool Success => IsSuccess; // Alias for compatibility
         public BoardState NewBoardState { get; private set; }
         public ScoreResult ScoreResult { get; private set; }
+        public int TotalScore { get; private set; }
         public Int2 PlacementPosition { get; private set; }
         public int ShapeIndex { get; private set; }
         public string ErrorMessage { get; private set; }
         
         // Convenience properties
+        public int ScoreDelta => ScoreResult.ScoreDelta;
         public int LinesCleared => ScoreResult.LinesCleared;
         public bool TriggersSpawn { get; private set; }
         
         private MoveResult(bool success, BoardState newBoardState, ScoreResult scoreResult, 
-            Int2 placementPosition, int shapeIndex, string errorMessage = null, bool triggersSpawn = false)
+            int totalScore, Int2 placementPosition, int shapeIndex, string errorMessage = null, bool triggersSpawn = false)
         {
             IsSuccess = success;
             NewBoardState = newBoardState;
             ScoreResult = scoreResult;
+            TotalScore = totalScore;
             PlacementPosition = placementPosition;
             ShapeIndex = shapeIndex;
             ErrorMessage = errorMessage;
             TriggersSpawn = triggersSpawn;
         }
         
-        public static MoveResult CreateSuccess(int score, int linesCleared, bool triggersSpawn = false)
+        public static MoveResult CreateSuccess(int totalScore, ScoreResult scoreResult, bool triggersSpawn = false)
         {
-            return new MoveResult(true, null, new ScoreResult(score, linesCleared, 0, 1.0f, score, 1.0f), Int2.Zero, 0, null, triggersSpawn);
+            return new MoveResult(
+                success: true,
+                newBoardState: null,
+                scoreResult: scoreResult,
+                totalScore: totalScore,
+                placementPosition: Int2.Zero,
+                shapeIndex: 0,
+                errorMessage: null,
+                triggersSpawn: triggersSpawn);
         }
         
         public static MoveResult Failed(string errorMessage)
         {
-            return new MoveResult(false, null, ScoreResult.Empty, Int2.Zero, -1, errorMessage);
+            return new MoveResult(false, null, ScoreResult.Empty, 0, Int2.Zero, -1, errorMessage);
         }
         
         // Static result instances for common failure cases

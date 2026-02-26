@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.EnhancedTouch;
+using System.Collections.Generic;
 using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 using BlockPuzzle.UnityAdapter.Blocks;
 using BlockPuzzle.UnityAdapter.Grid;
@@ -38,6 +39,7 @@ namespace BlockPuzzle.UnityAdapter.Input
 
         // State
         private Camera _cam;
+        private bool _cameraMissingLogged;
         private GameBootstrap _bootstrap;
         private NewSimpleBlock _draggedBlock;
         private bool _isDragging;
@@ -51,6 +53,7 @@ namespace BlockPuzzle.UnityAdapter.Input
         private void Awake()
         {
             _cam = Camera.main;
+            _cameraMissingLogged = false;
             _bootstrap = FindFirstObjectByType<GameBootstrap>();
             
             if (blockTray == null) blockTray = FindFirstObjectByType<NewBlockTray>();
@@ -63,6 +66,8 @@ namespace BlockPuzzle.UnityAdapter.Input
 
         private void Update()
         {
+            if (!TryEnsureCamera())
+                return;
             // Input kaynağını seç
             if (Touch.activeTouches.Count > 0)
             {
@@ -112,8 +117,35 @@ namespace BlockPuzzle.UnityAdapter.Input
 
         private Vector2 ScreenToWorld(Vector2 screenPos)
         {
+            if (!TryEnsureCamera())
+                return Vector2.zero;
             Vector3 worldPos = _cam.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, -_cam.transform.position.z));
             return new Vector2(worldPos.x, worldPos.y);
+        }
+        private bool TryEnsureCamera()
+        {
+            if (_cam != null)
+                return true;
+
+            _cam = Camera.main;
+            if (_cam != null)
+            {
+                _cameraMissingLogged = false;
+                return true;
+            }
+
+            if (!_cameraMissingLogged)
+            {
+                Debug.LogError("[NewDragSystem] MainCamera not found. Drag/preview disabled until a camera with MainCamera tag exists.");
+                _cameraMissingLogged = true;
+            }
+
+            if (_isDragging)
+            {
+                CancelDrag();
+            }
+
+            return false;
         }
 
         private void TryPickupBlock()
@@ -169,6 +201,23 @@ namespace BlockPuzzle.UnityAdapter.Input
                 else
                 {
                     previewSystem.HidePreview();
+                }
+            }
+
+            // Satır/sütun highlight güncelle
+            if (gridView != null)
+            {
+                if (_isOverGrid && CanPlaceAtAnchor(_currentGridAnchor))
+                {
+                    GetWouldClearLines(_currentGridAnchor, out var rows, out var cols);
+                    if (rows.Count > 0 || cols.Count > 0)
+                        gridView.HighlightLines(rows, cols);
+                    else
+                        gridView.ClearLineHighlights();
+                }
+                else
+                {
+                    gridView.ClearLineHighlights();
                 }
             }
         }
@@ -245,6 +294,7 @@ namespace BlockPuzzle.UnityAdapter.Input
                 previewSystem?.EndPreview(false);
             }
 
+            gridView?.ClearLineHighlights();
             _draggedBlock = null;
             _isDragging = false;
         }
@@ -257,9 +307,70 @@ namespace BlockPuzzle.UnityAdapter.Input
             }
             
             previewSystem?.EndPreview(false);
-            
+            gridView?.ClearLineHighlights();
+
             _draggedBlock = null;
             _isDragging = false;
+        }
+
+        /// <summary>
+        /// Bloğu anchor pozisyonuna koyarsak hangi satır ve sütunlar temizlenir?
+        /// Board'u değiştirmeden simüle eder.
+        /// </summary>
+        private void GetWouldClearLines(Int2 anchor, out List<int> fullRows, out List<int> fullCols)
+        {
+            fullRows = new List<int>();
+            fullCols = new List<int>();
+
+            if (_bootstrap?.Engine == null || _draggedBlock?.BlockShape == null) return;
+
+            var board = _bootstrap.Engine.CurrentState.Board;
+            var offsets = _draggedBlock.BlockShape.GetOffsets();
+
+            // Şeklin dolduracağı hücreleri hesapla
+            var shapeCells = new HashSet<(int, int)>();
+            var touchedRows = new HashSet<int>();
+            var touchedCols = new HashSet<int>();
+
+            foreach (var offset in offsets)
+            {
+                int cx = anchor.X + offset.X;
+                int cy = anchor.Y + offset.Y;
+
+                // Sınır dışıysa zaten yerleştirilemez, çık
+                if (cx < 0 || cx >= board.Width || cy < 0 || cy >= board.Height)
+                    return;
+
+                shapeCells.Add((cx, cy));
+                touchedRows.Add(cy);
+                touchedCols.Add(cx);
+            }
+
+            // Her dokunulan satırı kontrol et
+            foreach (int row in touchedRows)
+            {
+                int filledCount = 0;
+                for (int x = 0; x < board.Width; x++)
+                {
+                    if (board.IsOccupied(x, row) || shapeCells.Contains((x, row)))
+                        filledCount++;
+                }
+                if (filledCount == board.Width)
+                    fullRows.Add(row);
+            }
+
+            // Her dokunulan sütunu kontrol et
+            foreach (int col in touchedCols)
+            {
+                int filledCount = 0;
+                for (int y = 0; y < board.Height; y++)
+                {
+                    if (board.IsOccupied(col, y) || shapeCells.Contains((col, y)))
+                        filledCount++;
+                }
+                if (filledCount == board.Height)
+                    fullCols.Add(col);
+            }
         }
 
         // Public accessors

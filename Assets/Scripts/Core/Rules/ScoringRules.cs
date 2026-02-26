@@ -20,28 +20,50 @@ namespace BlockPuzzle.Core.Rules
     /// </summary>
     public static class ScoringRules
     {
+        private static ScoreConfig _defaultConfig = ScoreConfig.Default;
+
         /// <summary>
-        /// Base points awarded per cleared line.
+        /// Active default score configuration.
         /// </summary>
-        public const int BasePointsPerLine = 10;
+        public static ScoreConfig DefaultConfig => _defaultConfig;
+
+        /// <summary>
+        /// Replaces the default score configuration used by overloads without explicit config.
+        /// </summary>
+        public static void SetDefaultConfig(ScoreConfig config)
+        {
+            _defaultConfig = config ?? ScoreConfig.Default;
+        }
         
         /// <summary>
         /// Calculates score for a move with line clears.
         /// </summary>
         /// <param name="linesCleared">Number of lines cleared this move</param>
-        /// <param name="comboState">Current combo state (will be updated)</param>
+        /// <param name="comboState">Current combo state</param>
         /// <returns>Score result with detailed breakdown</returns>
         /// <exception cref="ArgumentNullException">If comboState is null</exception>
         public static ScoreResult CalculateScore(int linesCleared, ComboState comboState)
         {
+            return CalculateScore(linesCleared, comboState, _defaultConfig);
+        }
+
+        /// <summary>
+        /// Calculates score for a move with line clears using a specific score configuration.
+        /// </summary>
+        /// <param name="linesCleared">Number of lines cleared this move</param>
+        /// <param name="comboState">Current combo state</param>
+        /// <param name="scoreConfig">Score formula config</param>
+        /// <returns>Score result with detailed breakdown</returns>
+        /// <exception cref="ArgumentNullException">If comboState or scoreConfig is null</exception>
+        public static ScoreResult CalculateScore(int linesCleared, ComboState comboState, ScoreConfig scoreConfig)
+        {
             if (comboState == null)
                 throw new ArgumentNullException(nameof(comboState));
+            if (scoreConfig == null)
+                throw new ArgumentNullException(nameof(scoreConfig));
             
             if (linesCleared < 0)
                 throw new ArgumentException("Lines cleared cannot be negative", nameof(linesCleared));
-            
-            // Update combo state first
-            comboState.UpdateCombo(linesCleared);
             
             // No lines cleared = no score
             if (linesCleared == 0)
@@ -49,37 +71,40 @@ namespace BlockPuzzle.Core.Rules
                 return ScoreResult.Empty;
             }
             
-            // Calculate base score
-            int baseScore = linesCleared * BasePointsPerLine;
+            // Calculate base score with saturation for defensive safety.
+            long baseScoreLong = (long)linesCleared * scoreConfig.BasePointsPerLine;
+            int baseScore = baseScoreLong > int.MaxValue ? int.MaxValue : (int)baseScoreLong;
             
             // Line clear multiplier for simultaneous clears
-            float lineClearMultiplier = CalculateLineClearMultiplier(linesCleared);
+            float lineClearMultiplier = scoreConfig.EvaluateLineMultiplier(linesCleared);
+            float comboMultiplier = scoreConfig.EvaluateComboMultiplier(comboState.Streak);
             
             // Apply multipliers
-            float totalMultiplier = lineClearMultiplier * comboState.Multiplier;
-            int finalScore = (int)Math.Round(baseScore * totalMultiplier);
+            float totalMultiplier = lineClearMultiplier * comboMultiplier;
+            if (totalMultiplier < 0f || float.IsNaN(totalMultiplier) || float.IsInfinity(totalMultiplier))
+                throw new InvalidOperationException("Calculated score multiplier is invalid.");
+
+            double rawScore = baseScore * (double)totalMultiplier;
+            long roundedScore = scoreConfig.RoundingMode switch
+            {
+                ScoreRoundingMode.Floor => (long)Math.Floor(rawScore),
+                ScoreRoundingMode.Ceiling => (long)Math.Ceiling(rawScore),
+                ScoreRoundingMode.Truncate => (long)Math.Truncate(rawScore),
+                _ => (long)Math.Round(rawScore)
+            };
+            int finalScore = roundedScore <= 0L
+                ? 0
+                : roundedScore >= int.MaxValue ? int.MaxValue : (int)roundedScore;
             
             return new ScoreResult(
                 scoreDelta: finalScore,
                 linesCleared: linesCleared,
                 comboStreak: comboState.Streak,
-                comboMultiplier: comboState.Multiplier,
+                comboMultiplier: comboMultiplier,
                 baseScore: baseScore,
-                lineClearMultiplier: lineClearMultiplier
+                lineClearMultiplier: lineClearMultiplier,
+                formulaVersion: scoreConfig.FormulaVersion
             );
-        }
-        
-        /// <summary>
-        /// Calculates the multiplier for simultaneous line clears.
-        /// Formula: 1.0 + (lines - 1) * 0.5
-        /// This rewards clearing multiple lines at once.
-        /// </summary>
-        /// <param name="linesCleared">Number of lines cleared simultaneously</param>
-        /// <returns>Multiplier for simultaneous clears</returns>
-        private static float CalculateLineClearMultiplier(int linesCleared)
-        {
-            if (linesCleared <= 0) return 1.0f;
-            return 1.0f + (linesCleared - 1) * 0.5f;
         }
     }
 }

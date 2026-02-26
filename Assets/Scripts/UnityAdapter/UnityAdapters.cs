@@ -194,8 +194,10 @@ namespace BlockPuzzle.UnityAdapter
         public int BoardHeight;
         public int Score;
         public int ComboStreak;
+        public int ScoreFormulaVersion;
         public int[] ActiveBlockIds;
         public int[] ActiveBlockSlots;
+        public int[] ActiveBlockColorIds;
         public int MoveCount;
         public int TotalLinesCleared;
         public long GameStartTimeBinary;
@@ -226,8 +228,10 @@ namespace BlockPuzzle.UnityAdapter
                 BoardHeight = data.BoardHeight,
                 Score = data.Score,
                 ComboStreak = data.ComboStreak,
+                ScoreFormulaVersion = data.ScoreFormulaVersion,
                 ActiveBlockIds = ShapeIdsToInts(data.ActiveBlocks),
                 ActiveBlockSlots = data.ActiveBlockSlots,
+                ActiveBlockColorIds = data.ActiveBlockColorIds,
                 MoveCount = data.MoveCount,
                 TotalLinesCleared = data.TotalLinesCleared,
                 GameStartTimeBinary = data.GameStartTime.ToBinary(),
@@ -249,8 +253,10 @@ namespace BlockPuzzle.UnityAdapter
                 BoardHeight = BoardHeight,
                 Score = Score,
                 ComboStreak = ComboStreak,
+                ScoreFormulaVersion = ScoreFormulaVersion,
                 ActiveBlocks = IntsToShapeIds(ActiveBlockIds),
                 ActiveBlockSlots = ActiveBlockSlots,
+                ActiveBlockColorIds = ActiveBlockColorIds,
                 MoveCount = MoveCount,
                 TotalLinesCleared = TotalLinesCleared,
                 GameStartTime = DateTime.FromBinary(GameStartTimeBinary),

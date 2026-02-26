@@ -167,7 +167,8 @@ namespace BlockPuzzle.Core.RNG
                 _difficultyModel.DifficultyLevel,
                 _difficultyModel.RecentSuccessRate,
                 _difficultyModel.OverallSuccessRate,
-                _difficultyModel.TotalPlacements
+                _difficultyModel.TotalPlacements,
+                _difficultyModel.GetRecentPlacementHistorySnapshot()
             );
         }
         
@@ -308,14 +309,16 @@ namespace BlockPuzzle.Core.RNG
         public readonly float RecentSuccessRate;
         public readonly float OverallSuccessRate;
         public readonly int TotalPlacements;
+        public readonly bool[] RecentPlacementHistory;
         
         public SpawnerStats(float difficultyLevel, float recentSuccessRate, 
-            float overallSuccessRate, int totalPlacements)
+            float overallSuccessRate, int totalPlacements, bool[] recentPlacementHistory = null)
         {
             DifficultyLevel = difficultyLevel;
             RecentSuccessRate = recentSuccessRate;
             OverallSuccessRate = overallSuccessRate;
             TotalPlacements = totalPlacements;
+            RecentPlacementHistory = recentPlacementHistory == null ? null : (bool[])recentPlacementHistory.Clone();
         }
         
         public override string ToString()

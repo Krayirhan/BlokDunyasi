@@ -17,6 +17,7 @@ namespace BlockPuzzle.Core.Engine
     public class GameEngine
     {
         private readonly BlockSpawner _blockSpawner;
+        private readonly ScoreConfig _scoreConfig;
         
         /// <summary>
         /// Current game state.
@@ -42,6 +43,11 @@ namespace BlockPuzzle.Core.Engine
         /// Current score.
         /// </summary>
         public int Score => CurrentState.Score;
+
+        /// <summary>
+        /// Active score formula version.
+        /// </summary>
+        public int ScoreFormulaVersion => _scoreConfig.FormulaVersion;
         
         /// <summary>
         /// Event fired when game state changes.
@@ -63,9 +69,10 @@ namespace BlockPuzzle.Core.Engine
         /// </summary>
         public event Action<GameState> GameOver;
         
-        public GameEngine(SeededRng rng, int boardWidth = 10, int boardHeight = 10)
+        public GameEngine(SeededRng rng, int boardWidth = 10, int boardHeight = 10, ScoreConfig scoreConfig = null)
         {
             _blockSpawner = new BlockSpawner(rng);
+            _scoreConfig = scoreConfig ?? ScoreConfig.Default;
             CurrentState = new GameState(boardWidth, boardHeight);
         }
         
@@ -128,13 +135,13 @@ namespace BlockPuzzle.Core.Engine
                 return ConvertPlacementResult(placementResult);
             }
             
-            // Execute the move and get lines cleared
-            int linesCleared = ExecuteMove(activeBlockIndex, shape, boardPosition);
+            // Execute the move and get detailed scoring outcome.
+            MoveExecutionResult executionResult = ExecuteMove(activeBlockIndex, shape, boardPosition);
             
             // Check if new blocks were spawned (all blocks were placed)
             bool triggersSpawn = CurrentState.ActiveBlocks.IsFull; // If full, new blocks were just spawned
             
-            return MoveResult.CreateSuccess(CurrentState.Score, linesCleared, triggersSpawn);
+            return MoveResult.CreateSuccess(CurrentState.Score, executionResult.ScoreResult, triggersSpawn);
         }
         
         /// <summary>
@@ -197,9 +204,37 @@ namespace BlockPuzzle.Core.Engine
         {
             if (!IsValidMove(activeBlockIndex, boardPosition))
                 return ScoreResult.Empty;
-            
-            // For now, return empty - full implementation would simulate the move
-            return ScoreResult.Empty;
+
+            var shapeId = CurrentState.ActiveBlocks.GetShapeId(activeBlockIndex);
+            if (!ShapeLibrary.TryGetShape(shapeId, out var shape))
+                return ScoreResult.Empty;
+
+            var previewBoard = CurrentState.Board.Clone();
+
+            int blockId = CurrentState.MoveCount < int.MaxValue
+                ? CurrentState.MoveCount + 1
+                : int.MaxValue;
+            int colorId = CurrentState.ActiveBlocks.GetColorId(activeBlockIndex);
+
+            var placement = PlacementEngine.PlaceAtomic(
+                previewBoard,
+                boardPosition.X,
+                boardPosition.Y,
+                shape.Offsets,
+                blockId,
+                colorId,
+                out _);
+
+            if (placement != PlacementResult.Success)
+                return ScoreResult.Empty;
+
+            var lineResult = LineDetector.DetectFullLines(previewBoard);
+            int totalLinesCleared = lineResult.FullRowCount + lineResult.FullColumnCount;
+            if (totalLinesCleared <= 0)
+                return ScoreResult.Empty;
+
+            var previewCombo = CurrentState.ComboState.Clone().IncrementCombo();
+            return ScoringRules.CalculateScore(totalLinesCleared, previewCombo, _scoreConfig);
         }
         
         /// <summary>
@@ -286,14 +321,22 @@ namespace BlockPuzzle.Core.Engine
             );
         }
         
-        private int ExecuteMove(int activeBlockIndex, ShapeDefinition shape, Int2 boardPosition)
+        private MoveExecutionResult ExecuteMove(int activeBlockIndex, ShapeDefinition shape, Int2 boardPosition)
         {
             // Generate unique block ID for this placement
-            int blockId = CurrentState.MoveCount + 1;
-            // Keep the same color as the dragged block - exact same calculation as SimpleBlock
-            // SimpleBlock: SlotIndex % blockColors.Length, then +1 for 1-based ColorId
-            int colorId = (activeBlockIndex % 8) + 1;
-            
+            int blockId = CurrentState.MoveCount < int.MaxValue
+                ? CurrentState.MoveCount + 1
+                : int.MaxValue;
+            // Traydeki bloktan colorId al
+            int colorId = 1;
+            // Aktif bloklardan colorId'yi bul
+            if (CurrentState.ActiveBlocks.HasBlockAt(activeBlockIndex))
+            {
+                // NewSimpleBlock objesinden colorId alınmalı, burada ActiveBlocks'tan alınamıyorsa
+                // colorId = ... (gerekirse eklenir)
+                // Şimdilik slot index ile uyumlu olarak 1-based
+                colorId = CurrentState.ActiveBlocks.GetColorId(activeBlockIndex);
+            }
             // Place the block using static PlacementEngine
             PlacementEngine.PlaceAtomic(
                 CurrentState.Board, 
@@ -314,6 +357,7 @@ namespace BlockPuzzle.Core.Engine
             
             // Track lines cleared for return value
             int totalLinesCleared = 0;
+            var scoreResult = ScoreResult.Empty;
             
             // Check for line clears using static LineDetector
             var lineResult = LineDetector.DetectFullLines(CurrentState.Board);
@@ -329,7 +373,7 @@ namespace BlockPuzzle.Core.Engine
                 var clearResult = LineClearer.ClearLines(CurrentState.Board, fullRows, fullCols);
                 
                 totalLinesCleared = lineResult.FullRowCount + lineResult.FullColumnCount;
-                CurrentState = CurrentState.WithLinesCleared(CurrentState.TotalLinesCleared + totalLinesCleared);
+                CurrentState = CurrentState.WithLinesCleared(totalLinesCleared);
                 
                 OnLinesCleared(clearResult);
                 
@@ -337,8 +381,9 @@ namespace BlockPuzzle.Core.Engine
                 var newCombo = CurrentState.ComboState.IncrementCombo();
                 CurrentState = CurrentState.WithComboState(newCombo);
                 
-                var scoreResult = ScoringRules.CalculateScore(totalLinesCleared, newCombo);
-                CurrentState = CurrentState.WithScore(CurrentState.Score + scoreResult.ScoreDelta);
+                scoreResult = ScoringRules.CalculateScore(totalLinesCleared, newCombo, _scoreConfig);
+                int nextScore = AddScoreSafely(CurrentState.Score, scoreResult.ScoreDelta);
+                CurrentState = CurrentState.WithScore(nextScore);
                 
                 OnScoreChanged(scoreResult);
             }
@@ -347,6 +392,14 @@ namespace BlockPuzzle.Core.Engine
                 // Break combo if no lines cleared
                 var newCombo = CurrentState.ComboState.ResetCombo();
                 CurrentState = CurrentState.WithComboState(newCombo);
+                scoreResult = new ScoreResult(
+                    scoreDelta: 0,
+                    linesCleared: 0,
+                    comboStreak: newCombo.Streak,
+                    comboMultiplier: _scoreConfig.EvaluateComboMultiplier(newCombo.Streak),
+                    baseScore: 0,
+                    lineClearMultiplier: 1.0f,
+                    formulaVersion: _scoreConfig.FormulaVersion);
             }
             
             // Increment move count
@@ -360,7 +413,30 @@ namespace BlockPuzzle.Core.Engine
             
             OnStateChanged();
             
-            return totalLinesCleared;
+            return new MoveExecutionResult(scoreResult);
+        }
+
+        private static int AddScoreSafely(int currentScore, int scoreDelta)
+        {
+            if (scoreDelta < 0)
+                throw new InvalidOperationException($"Score delta cannot be negative. Received: {scoreDelta}");
+
+            long next = (long)currentScore + scoreDelta;
+            if (next > int.MaxValue)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[GameEngine] Score overflow prevented. Current={currentScore}, Delta={scoreDelta}. Clamped to int.MaxValue.");
+                return int.MaxValue;
+            }
+
+            if (next < 0)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[GameEngine] Score underflow prevented. Current={currentScore}, Delta={scoreDelta}. Clamped to 0.");
+                return 0;
+            }
+
+            return (int)next;
         }
         
         private MoveResult ConvertPlacementResult(PlacementResult placementResult)
@@ -393,6 +469,15 @@ namespace BlockPuzzle.Core.Engine
             GameOver?.Invoke(CurrentState);
         }
 
+        private readonly struct MoveExecutionResult
+        {
+            public readonly ScoreResult ScoreResult;
+
+            public MoveExecutionResult(ScoreResult scoreResult)
+            {
+                ScoreResult = scoreResult;
+            }
+        }
 
     }
     

@@ -6,6 +6,7 @@ using BlockPuzzle.Core.Board;
 namespace BlockPuzzle.Core.Tests.Board
 {
     [TestFixture]
+    [Category("Unit")]
     public class BoardStateTests
     {
         private BoardState _board;

@@ -10,8 +10,11 @@ namespace BlockPuzzle.UnityAdapter.UI
         [Header("UI")]
         [SerializeField] private TextMeshProUGUI[] entries;
         [SerializeField] private string entryFormat = "{0}. {1}";
+        [SerializeField] private bool showRankPrefix = false;
         [SerializeField] private string emptyEntryText = "-";
         [SerializeField] [Range(1, 10)] private int maxEntries = 5;
+        [SerializeField] private bool centerSingleEntry = true;
+        [SerializeField] private float singleEntryAnchoredX = 0f;
 
         private UnityPlayerPrefsDataProvider _dataProvider;
 
@@ -34,14 +37,34 @@ namespace BlockPuzzle.UnityAdapter.UI
             var scores = stats.GetTopScores(maxEntries);
 
             int count = Mathf.Min(maxEntries, entries.Length);
+            bool singleEntryMode = count == 1;
             for (int i = 0; i < count; i++)
             {
-                var text = i < scores.Count
-                    ? string.Format(entryFormat, i + 1, scores[i])
-                    : emptyEntryText;
+                string text;
+                if (i < scores.Count)
+                {
+                    text = showRankPrefix
+                        ? string.Format(entryFormat, i + 1, scores[i])
+                        : scores[i].ToString();
+                }
+                else
+                {
+                    text = emptyEntryText;
+                }
 
                 if (entries[i] != null)
+                {
+                    if (singleEntryMode && centerSingleEntry)
+                    {
+                        var rect = entries[i].rectTransform;
+                        var anchored = rect.anchoredPosition;
+                        anchored.x = singleEntryAnchoredX;
+                        rect.anchoredPosition = anchored;
+                        entries[i].alignment = TextAlignmentOptions.Center;
+                    }
+
                     entries[i].text = text;
+                }
             }
         }
     }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using BlockPuzzle.Core.Shapes;
 using BlockPuzzle.UnityAdapter.Boot;
@@ -22,6 +23,23 @@ namespace BlockPuzzle.UnityAdapter.Blocks
         [SerializeField] private float blockCellSize = 0.5f;
         [SerializeField] private float blockCellSpacing = 0f;
 
+        [Header("=== BLOCK VISUAL SETTINGS ===")]
+        [SerializeField] private Color[] blockColors =
+        {
+            new Color(0.9f, 0.3f, 0.8f),
+            new Color(0.5f, 0.3f, 0.9f),
+            new Color(0.2f, 0.7f, 1f),
+            new Color(1f, 0.5f, 0.2f),
+            new Color(0.3f, 0.8f, 0.4f),
+            new Color(1f, 0.2f, 0.2f),
+            new Color(0.9f, 0.8f, 0.1f),
+            new Color(0.7f, 0.4f, 1f)
+        };
+        [SerializeField] [Range(0.5f, 2.0f)] private float trayBlockBrightness = 1.0f;
+        [SerializeField] [Range(1.0f, 2.0f)] private float dragBrightnessMultiplier = 1.2f;
+        [SerializeField] [Range(0f, 1f)] private float normalAlpha = 1.0f;
+        [SerializeField] [Range(0f, 1f)] private float dragAlpha = 0.9f;
+
         [Header("=== TRAY SCALE (for preview size) ===")]
         [Tooltip("Tray'deki blokların boyutu. 0.7 = grid'in %70'i")]
         [SerializeField] private float trayBlockScale = 0.7f;
@@ -41,14 +59,40 @@ namespace BlockPuzzle.UnityAdapter.Blocks
         [SerializeField] private float trayGapFromGrid = 0.4f;
         [SerializeField] [Range(0.2f, 1f)] private float minTrayScale = 0.35f;
 
+        private readonly struct ShapeExtents
+        {
+            public readonly float Left;
+            public readonly float Right;
+            public readonly float Top;
+            public readonly float Bottom;
+
+            public float Width => Right - Left;
+            public float Height => Top - Bottom;
+
+            public ShapeExtents(float left, float right, float top, float bottom)
+            {
+                Left = left;
+                Right = right;
+                Top = top;
+                Bottom = bottom;
+            }
+        }
+
         private NewSimpleBlock[] _blocks = new NewSimpleBlock[3];
+        private readonly Queue<NewSimpleBlock> _blockPool = new Queue<NewSimpleBlock>();
         private ShapeDefinition[] _currentShapes;
+        private ShapeDefinition[] _layoutShapes;
         private float _currentTrayScale = 1f;
+        private GameBootstrap _gameBootstrap;
+        private bool _hasCalculatedLayout;
 
         private void Awake()
         {
             if (gridView == null)
                 gridView = FindFirstObjectByType<SimpleGridView>();
+            
+            if (_gameBootstrap == null)
+                _gameBootstrap = FindFirstObjectByType<GameBootstrap>();
 
             // Subscribe to event in Awake to ensure we don't miss the first OnBlocksChanged
             // GameBootstrap.Start() may fire before NewBlockTray.Start()!
@@ -113,52 +157,52 @@ namespace BlockPuzzle.UnityAdapter.Blocks
             Debug.Log($"[NewBlockTray.OnBlocksChanged] Received {shapes.Length} slots, {nonNullCount} non-null shapes");
             
             _currentShapes = shapes;
-            UpdateSlotLayout(shapes);
+            
+            // Keep slot positions stable while player consumes the current 3-block set.
+            // Recalculate layout only for first render or when a full new set (3 blocks) arrives.
+            if (!_hasCalculatedLayout || nonNullCount == 3)
+            {
+                if (nonNullCount == 3)
+                    _layoutShapes = (ShapeDefinition[])shapes.Clone();
+
+                var layoutSource = _layoutShapes ?? shapes;
+                UpdateSlotLayout(layoutSource);
+                _hasCalculatedLayout = true;
+            }
+
             RefreshAllBlocks();
         }
 
         private void RefreshAllBlocks()
         {
-            int createdCount = 0;
-            
+            int activeCount = 0;
+
             Debug.Log($"[NewBlockTray.RefreshAllBlocks] Starting refresh. _currentShapes={((_currentShapes != null) ? _currentShapes.Length.ToString() : "NULL")}");
-            
+
             for (int i = 0; i < 3; i++)
             {
-                if (_blocks[i] != null)
-                {
-                    Debug.Log($"[NewBlockTray.RefreshAllBlocks] Destroying old block at slot {i}: {_blocks[i].gameObject.name}");
-                    Destroy(_blocks[i].gameObject);
-                    _blocks[i] = null;
-                }
-
-                if (_currentShapes != null && i < _currentShapes.Length && _currentShapes[i] != null)
+                bool hasShape = _currentShapes != null && i < _currentShapes.Length && _currentShapes[i] != null;
+                if (hasShape)
                 {
                     CreateBlockAt(i, _currentShapes[i]);
-                    createdCount++;
+                    activeCount++;
                 }
                 else
                 {
+                    if (_blocks[i] != null)
+                    {
+                        ReleaseBlock(_blocks[i]);
+                        _blocks[i] = null;
+                    }
+
                     string reason = _currentShapes == null ? "_currentShapes is NULL" :
                                     i >= _currentShapes.Length ? $"index {i} >= Length {_currentShapes.Length}" :
                                     "_currentShapes[i] is NULL";
-                    Debug.Log($"[NewBlockTray.RefreshAllBlocks] Slot {i} is NULL - no block created. Reason: {reason}");
+                    Debug.Log($"[NewBlockTray.RefreshAllBlocks] Slot {i} is NULL - no block active. Reason: {reason}");
                 }
             }
-            
-            Debug.Log($"[NewBlockTray.RefreshAllBlocks] Created {createdCount} blocks total");
-            
-            // Final verification - count actual blocks in _blocks array
-            int actualBlockCount = 0;
-            for (int i = 0; i < 3; i++)
-            {
-                if (_blocks[i] != null)
-                {
-                    actualBlockCount++;
-                    Debug.Log($"[NewBlockTray.RefreshAllBlocks] VERIFY: _blocks[{i}] = {_blocks[i].gameObject.name}, IsUsed={_blocks[i].IsUsed}, position={_blocks[i].transform.position}");
-                }
-            }
-            Debug.Log($"[NewBlockTray.RefreshAllBlocks] FINAL: {actualBlockCount} blocks in _blocks array");
+
+            Debug.Log($"[NewBlockTray.RefreshAllBlocks] Active blocks: {activeCount}, pooled: {_blockPool.Count}");
         }
 
         private void CreateBlockAt(int slotIndex, ShapeDefinition shape)
@@ -171,22 +215,99 @@ namespace BlockPuzzle.UnityAdapter.Blocks
             }
             
             Vector3 pos = slotPositions[slotIndex];
-            Debug.Log($"[NewBlockTray.CreateBlockAt] Creating block at slot {slotIndex}: {shape.Name} (ShapeId: {shape.Id}) at position {pos}");
-            
-            var blockObj = new GameObject($"Block_{slotIndex}_{shape.Name}");
-            blockObj.transform.SetParent(transform);
+            var block = _blocks[slotIndex];
+            if (block == null)
+            {
+                block = AcquireBlock();
+                _blocks[slotIndex] = block;
+            }
+
+            ApplyBlockVisualSettings(block);
+
+            var blockObj = block.gameObject;
+            blockObj.name = $"Block_{slotIndex}_{shape.Name}";
+            blockObj.transform.SetParent(transform, false);
             blockObj.transform.position = pos;
-            blockObj.transform.localScale = Vector3.one * _currentTrayScale;
+            blockObj.transform.localScale = Vector3.one;
+            blockObj.SetActive(true);
 
-            var block = blockObj.AddComponent<NewSimpleBlock>();
-            block.cellSize = blockCellSize;
+            block.cellSize = blockCellSize * _currentTrayScale;
             block.cellSpacing = blockCellSpacing;
-            block.Initialize(shape, spriteConfig, slotIndex);
-
-            _blocks[slotIndex] = block;
+            
+            // GameBootstrap'tan mevcut colorId'yi al
+            int existingColorId = -1;
+            if (_gameBootstrap != null &&
+                _gameBootstrap.CurrentState != null &&
+                _gameBootstrap.CurrentState.ActiveBlocks.TryGetColorId(slotIndex, out int savedColorId))
+            {
+                existingColorId = savedColorId;
+            }
+            
+            // ColorId'yi geç: varsa mevcut, yoksa -1 (random olacak)
+            block.Initialize(shape, spriteConfig, slotIndex, existingColorId);
+            block.ResetBlock();
+            
+            // Yeni blok oluştuysa ve colorId atanmışsa, ActiveBlocks'a set et
+            if (block.ColorId > 0 && _gameBootstrap != null && _gameBootstrap.CurrentState != null)
+            {
+                _gameBootstrap.CurrentState.ActiveBlocks.SetColorId(slotIndex, block.ColorId);
+            }
             
             // Verify block was created successfully
             Debug.Log($"[NewBlockTray.CreateBlockAt] Block created: name={blockObj.name}, position={blockObj.transform.position}, scale={blockObj.transform.localScale}, activeInHierarchy={blockObj.activeInHierarchy}, _blocks[{slotIndex}]={(block != null ? "SET" : "NULL")}");
+        }
+
+        private void ApplyBlockVisualSettings(NewSimpleBlock block)
+        {
+            if (block == null)
+                return;
+
+            block.ApplyVisualSettings(
+                blockColors,
+                trayBlockBrightness,
+                dragBrightnessMultiplier,
+                normalAlpha,
+                dragAlpha);
+        }
+
+        private NewSimpleBlock AcquireBlock()
+        {
+            if (_blockPool.Count > 0)
+            {
+                var pooled = _blockPool.Dequeue();
+                if (pooled != null)
+                {
+                    pooled.gameObject.SetActive(true);
+                    return pooled;
+                }
+            }
+
+            var blockObj = new GameObject("PooledBlock");
+            blockObj.transform.SetParent(transform, false);
+            return blockObj.AddComponent<NewSimpleBlock>();
+        }
+
+        private void ReleaseBlock(NewSimpleBlock block)
+        {
+            if (block == null)
+                return;
+
+            block.gameObject.SetActive(false);
+            _blockPool.Enqueue(block);
+        }
+
+        /// <summary>
+        /// Recomputes tray layout for current screen size/orientation.
+        /// Keeps slot template stable during a 3-block set and rebuilds active block visuals.
+        /// </summary>
+        public void RefreshLayoutForScreenChange()
+        {
+            var layoutSource = _layoutShapes ?? _currentShapes;
+            if (layoutSource == null)
+                return;
+
+            UpdateSlotLayout(layoutSource);
+            RefreshAllBlocks();
         }
 
         // === PUBLIC API ===
@@ -256,84 +377,138 @@ namespace BlockPuzzle.UnityAdapter.Blocks
             if (slotPositions == null || slotPositions.Length != 3)
                 slotPositions = new Vector3[3];
 
-            int maxWidthCells = 1;
-            int maxHeightCells = 1;
+            float cellStep = blockCellSize + blockCellSpacing;
+            var extents = new ShapeExtents[3];
+            float totalWidthUnits = 0f;
+            float maxTop = float.MinValue;
+            float minBottom = float.MaxValue;
+            float maxHeightUnits = 0f;
 
-            if (shapes != null)
+            for (int i = 0; i < 3; i++)
             {
-                foreach (var shape in shapes)
-                {
-                    if (shape == null || shape.Offsets == null || shape.Offsets.Length == 0)
-                        continue;
+                ShapeDefinition shape = (shapes != null && i < shapes.Length) ? shapes[i] : null;
+                extents[i] = GetShapeExtents(shape, cellStep);
 
-                    int minX = int.MaxValue;
-                    int maxX = int.MinValue;
-                    int minY = int.MaxValue;
-                    int maxY = int.MinValue;
-
-                    foreach (var offset in shape.Offsets)
-                    {
-                        minX = Mathf.Min(minX, offset.X);
-                        maxX = Mathf.Max(maxX, offset.X);
-                        minY = Mathf.Min(minY, offset.Y);
-                        maxY = Mathf.Max(maxY, offset.Y);
-                    }
-
-                    int widthCells = maxX - minX + 1;
-                    int heightCells = maxY - minY + 1;
-
-                    if (widthCells > maxWidthCells) maxWidthCells = widthCells;
-                    if (heightCells > maxHeightCells) maxHeightCells = heightCells;
-                }
+                totalWidthUnits += extents[i].Width;
+                maxTop = Mathf.Max(maxTop, extents[i].Top);
+                minBottom = Mathf.Min(minBottom, extents[i].Bottom);
+                maxHeightUnits = Mathf.Max(maxHeightUnits, extents[i].Height);
             }
 
-            float cellStep = blockCellSize + blockCellSpacing;
-            float maxWidthUnits = maxWidthCells * cellStep;
-            float maxHeightUnits = maxHeightCells * cellStep;
+            if (totalWidthUnits <= 0f)
+                totalWidthUnits = blockCellSize * 3f;
+
+            if (maxHeightUnits <= 0f)
+                maxHeightUnits = blockCellSize;
 
             float cameraHalfWidth = cam.orthographicSize * cam.aspect;
             float cameraWidth = cameraHalfWidth * 2f;
-            float availableWidth = cameraWidth - (trayHorizontalPadding * 2f) - (slotGap * 2f);
-            float maxScale = availableWidth / (3f * maxWidthUnits);
+            float safeAreaWidth = Mathf.Max(0.1f, cameraWidth - (trayHorizontalPadding * 2f));
+            float widthBudgetForBlocks = Mathf.Max(0.1f, safeAreaWidth - (slotGap * 2f));
+            float maxScaleByWidth = widthBudgetForBlocks / totalWidthUnits;
 
-            if (maxScale <= 0f || float.IsNaN(maxScale))
+            float maxScaleByHeight = float.PositiveInfinity;
+            if (gridView != null && gridView.Width > 0 && gridView.Height > 0)
             {
+                Vector3 bottomCell = gridView.GetWorldPosition(0, gridView.Height - 1);
+                float gridBottom = bottomCell.y - (gridView.TotalCellSize * 0.5f);
+                float cameraBottom = cam.transform.position.y - cam.orthographicSize;
+                float availableHeight = (gridBottom - trayGapFromGrid) - (cameraBottom + trayVerticalPadding);
+
+                if (availableHeight > 0f)
+                    maxScaleByHeight = availableHeight / maxHeightUnits;
+                else
+                    maxScaleByHeight = 0.1f;
+            }
+
+            float fitScale = Mathf.Min(maxScaleByWidth, maxScaleByHeight);
+            if (float.IsNaN(fitScale) || fitScale <= 0f)
+                fitScale = 0.1f;
+
+            _currentTrayScale = Mathf.Min(trayBlockScale, fitScale);
+            if (_currentTrayScale < minTrayScale && fitScale >= minTrayScale)
                 _currentTrayScale = minTrayScale;
-            }
-            else
-            {
-                _currentTrayScale = Mathf.Min(trayBlockScale, maxScale);
-                if (_currentTrayScale < minTrayScale)
-                    _currentTrayScale = maxScale;
-            }
-
             _currentTrayScale = Mathf.Max(_currentTrayScale, 0.1f);
 
-            float blockWidth = maxWidthUnits * _currentTrayScale;
-            float totalWidth = (3f * blockWidth) + (2f * slotGap);
-            float leftX = cam.transform.position.x - (totalWidth * 0.5f) + (blockWidth * 0.5f);
+            float scaledTotalWidth = (totalWidthUnits * _currentTrayScale) + (slotGap * 2f);
+            float safeLeft = cam.transform.position.x - cameraHalfWidth + trayHorizontalPadding;
+            float leftBound = safeLeft + Mathf.Max(0f, (safeAreaWidth - scaledTotalWidth) * 0.5f);
 
-            float trayY = GetTrayY(cam, maxHeightUnits * _currentTrayScale);
+            float trayY = GetTrayY(cam, maxTop * _currentTrayScale, minBottom * _currentTrayScale);
 
-            slotPositions[0] = new Vector3(leftX, trayY, 0f);
-            slotPositions[1] = new Vector3(leftX + blockWidth + slotGap, trayY, 0f);
-            slotPositions[2] = new Vector3(leftX + (blockWidth + slotGap) * 2f, trayY, 0f);
+            float currentLeft = leftBound;
+            for (int i = 0; i < 3; i++)
+            {
+                float anchorX = currentLeft - (extents[i].Left * _currentTrayScale);
+                slotPositions[i] = new Vector3(anchorX, trayY, 0f);
+                currentLeft += (extents[i].Width * _currentTrayScale);
+                if (i < 2)
+                    currentLeft += slotGap;
+            }
         }
 
-        private float GetTrayY(Camera cam, float blockHeight)
+        private ShapeExtents GetShapeExtents(ShapeDefinition shape, float cellStep)
+        {
+            float halfCell = blockCellSize * 0.5f;
+
+            if (shape == null || shape.Offsets == null || shape.Offsets.Length == 0)
+                return new ShapeExtents(-halfCell, halfCell, halfCell, -halfCell);
+
+            int minX = int.MaxValue;
+            int maxX = int.MinValue;
+            int minY = int.MaxValue;
+            int maxY = int.MinValue;
+
+            foreach (var offset in shape.Offsets)
+            {
+                minX = Mathf.Min(minX, offset.X);
+                maxX = Mathf.Max(maxX, offset.X);
+                minY = Mathf.Min(minY, offset.Y);
+                maxY = Mathf.Max(maxY, offset.Y);
+            }
+
+            float left = (minX * cellStep) - halfCell;
+            float right = (maxX * cellStep) + halfCell;
+            float top = (-minY * cellStep) + halfCell;
+            float bottom = (-maxY * cellStep) - halfCell;
+
+            if (right <= left)
+                right = left + blockCellSize;
+            if (top <= bottom)
+                top = bottom + blockCellSize;
+
+            return new ShapeExtents(left, right, top, bottom);
+        }
+
+        private float GetTrayY(Camera cam, float topExtent, float bottomExtent)
         {
             float cameraBottom = cam.transform.position.y - cam.orthographicSize;
-            float minY = cameraBottom + trayVerticalPadding + (blockHeight * 0.5f);
+            float minAnchorY = (cameraBottom + trayVerticalPadding) - bottomExtent;
 
             if (gridView != null && gridView.Width > 0 && gridView.Height > 0)
             {
                 Vector3 bottomCell = gridView.GetWorldPosition(0, gridView.Height - 1);
                 float gridBottom = bottomCell.y - (gridView.TotalCellSize * 0.5f);
-                float desired = gridBottom - trayGapFromGrid - (blockHeight * 0.5f);
-                return Mathf.Max(minY, desired);
+                float maxAnchorY = (gridBottom - trayGapFromGrid) - topExtent;
+                if (maxAnchorY >= minAnchorY)
+                    return maxAnchorY;
             }
 
-            return minY;
+            return minAnchorY;
+        }
+
+        private void OnValidate()
+        {
+            trayBlockBrightness = Mathf.Clamp(trayBlockBrightness, 0.5f, 2.0f);
+            dragBrightnessMultiplier = Mathf.Clamp(dragBrightnessMultiplier, 1.0f, 2.0f);
+            normalAlpha = Mathf.Clamp01(normalAlpha);
+            dragAlpha = Mathf.Clamp01(dragAlpha);
+
+            if (!Application.isPlaying)
+                return;
+
+            for (int i = 0; i < _blocks.Length; i++)
+                ApplyBlockVisualSettings(_blocks[i]);
         }
     }
 }

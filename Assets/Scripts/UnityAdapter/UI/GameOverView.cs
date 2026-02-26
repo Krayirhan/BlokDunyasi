@@ -41,6 +41,7 @@ namespace BlockPuzzle.UnityAdapter.UI
             // 1) Panel referansı yoksa "kendi GameObject'i" panel kabul et
             if (gameOverPanel == null)
                 gameOverPanel = this.gameObject;
+            EnsurePanelOnTop();
 
             // 2) CanvasGroup garanti
             _canvasGroup = gameOverPanel.GetComponent<CanvasGroup>();
@@ -49,6 +50,7 @@ namespace BlockPuzzle.UnityAdapter.UI
 
             // 3) Bootstrap bul
             EnsureBootstrap();
+            EnsurePanelOnTop();
 
             // 4) UI referanslarını (opsiyonel) otomatik bul
             AutoWireIfMissing();
@@ -58,6 +60,7 @@ namespace BlockPuzzle.UnityAdapter.UI
 
             // 6) Button listener'ları
             SetupButtonListeners();
+            ConfigureInteractiveUi();
 
             // 7) Başlangıçta paneli gizle
             HideGameOverScreenImmediate();
@@ -209,6 +212,53 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (mainMenuButton != null) mainMenuButton.onClick.RemoveAllListeners();
         }
 
+        private void ConfigureInteractiveUi()
+        {
+            if (gameOverPanel == null)
+                return;
+
+            // Keep panel background behind everything and prevent it from consuming input.
+            var background = FindDeep(gameOverPanel.transform, "Background");
+            if (background != null)
+            {
+                background.SetAsFirstSibling();
+
+                var bgImage = background.GetComponent<Image>();
+                if (bgImage != null)
+                    bgImage.raycastTarget = false;
+            }
+
+            ConfigureButtonHitTarget(restartButton);
+            ConfigureButtonHitTarget(mainMenuButton);
+        }
+
+        private void ConfigureButtonHitTarget(Button button)
+        {
+            if (button == null)
+                return;
+
+            button.interactable = true;
+
+            if (button.targetGraphic != null)
+                button.targetGraphic.raycastTarget = true;
+
+            // Let button root receive clicks. Child labels/decorations should not steal raycasts.
+            var childImages = button.GetComponentsInChildren<Image>(true);
+            for (int i = 0; i < childImages.Length; i++)
+            {
+                var image = childImages[i];
+                if (image != null && image.gameObject != button.gameObject)
+                    image.raycastTarget = false;
+            }
+
+            var childTexts = button.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < childTexts.Length; i++)
+            {
+                if (childTexts[i] != null)
+                    childTexts[i].raycastTarget = false;
+            }
+        }
+
         // -------------------------------------------------------
         // Event handlers
         // -------------------------------------------------------
@@ -250,6 +300,7 @@ namespace BlockPuzzle.UnityAdapter.UI
             }
 
             EnsureBootstrap();
+            EnsurePanelOnTop();
 
             // Paneli aç
             gameOverPanel.SetActive(true);
@@ -259,10 +310,14 @@ namespace BlockPuzzle.UnityAdapter.UI
             _canvasGroup.interactable = true;
             _canvasGroup.blocksRaycasts = true;
             gameOverPanel.transform.localScale = Vector3.one;
+            ConfigureInteractiveUi();
 
             // Skor bilgileri
             int bestScore = _gameBootstrap != null ? _gameBootstrap.BestScore : finalScore;
-            bool isNewBest = isNewBestOverride ?? (finalScore >= bestScore && finalScore > 0);
+            bool isNewBest = isNewBestOverride
+                ?? (_gameBootstrap != null
+                    ? _gameBootstrap.IsCurrentSessionNewBest(finalScore)
+                    : GameBootstrap.EvaluateIsNewBestScore(finalScore, bestScore));
 
             if (finalScoreText != null) finalScoreText.text = $"Skor: {finalScore}";
             if (bestScoreText != null) bestScoreText.text = $"En İyi: {bestScore}";
@@ -277,6 +332,16 @@ namespace BlockPuzzle.UnityAdapter.UI
 
             if (CanLog)
                 Debug.Log($"[GameOverView] Panel activated. activeInHierarchy={gameOverPanel.activeInHierarchy}, alpha={_canvasGroup.alpha}");
+        }
+
+        private void EnsurePanelOnTop()
+        {
+            if (gameOverPanel == null)
+                return;
+
+            var panelTransform = gameOverPanel.transform;
+            if (panelTransform.parent != null)
+                panelTransform.SetAsLastSibling();
         }
 
         private void HideGameOverScreenImmediate()

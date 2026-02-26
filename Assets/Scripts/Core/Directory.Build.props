@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <MSBuildProjectExtensionsPath>../../../Temp/obj/BlockPuzzle.Core/</MSBuildProjectExtensionsPath>
+    <BaseIntermediateOutputPath>../../../Temp/obj/BlockPuzzle.Core/</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>

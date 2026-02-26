@@ -3,6 +3,7 @@ using System;
 using BlockPuzzle.Core.Board;
 using BlockPuzzle.Core.Engine;
 using BlockPuzzle.Core.RNG;
+using BlockPuzzle.Core.Rules;
 using BlockPuzzle.Core.Shapes;
 
 namespace BlockPuzzle.Core.Persistence
@@ -17,7 +18,7 @@ namespace BlockPuzzle.Core.Persistence
         /// <summary>
         /// Version of this save data format (for backwards compatibility).
         /// </summary>
-        public int SaveVersion { get; set; } = 1;
+        public int SaveVersion { get; set; } = 2;
         
         /// <summary>
         /// Timestamp when this save was created.
@@ -48,6 +49,11 @@ namespace BlockPuzzle.Core.Persistence
         /// Current combo streak.
         /// </summary>
         public int ComboStreak { get; set; }
+
+        /// <summary>
+        /// Score formula version used when this save was written.
+        /// </summary>
+        public int ScoreFormulaVersion { get; set; } = ScoreConfig.DefaultFormulaVersion;
         
         /// <summary>
         /// Active block shape IDs.
@@ -58,6 +64,11 @@ namespace BlockPuzzle.Core.Persistence
         /// Active block slots (fixed 3 slots, -1 for empty).
         /// </summary>
         public int[] ActiveBlockSlots { get; set; }
+
+        /// <summary>
+        /// Active block color IDs for fixed 3 slots (0 for empty/unknown).
+        /// </summary>
+        public int[] ActiveBlockColorIds { get; set; }
         
         /// <summary>
         /// Total number of moves made.
@@ -104,6 +115,7 @@ namespace BlockPuzzle.Core.Persistence
             SaveTime = DateTime.Now;
             ActiveBlocks = new ShapeId[0];
             ActiveBlockSlots = null;
+            ActiveBlockColorIds = null;
             SpawnerData = new SpawnerSaveData();
         }
         
@@ -114,8 +126,19 @@ namespace BlockPuzzle.Core.Persistence
         /// <param name="spawnerStats">Current spawner statistics</param>
         /// <param name="randomSeed">Current random seed</param>
         /// <returns>Serializable GameData</returns>
-        public static GameData FromGameState(GameState gameState, SpawnerStats spawnerStats, int randomSeed)
+        public static GameData FromGameState(
+            GameState gameState,
+            SpawnerStats spawnerStats,
+            int randomSeed,
+            int scoreFormulaVersion = ScoreConfig.DefaultFormulaVersion)
         {
+            var activeBlockColorIds = new int[3];
+            for (int i = 0; i < activeBlockColorIds.Length; i++)
+            {
+                if (gameState.ActiveBlocks.TryGetColorId(i, out int colorId))
+                    activeBlockColorIds[i] = colorId;
+            }
+
             return new GameData
             {
                 SaveTime = DateTime.Now,
@@ -124,8 +147,10 @@ namespace BlockPuzzle.Core.Persistence
                 BoardHeight = gameState.Board.Height,
                 Score = gameState.Score,
                 ComboStreak = gameState.ComboState.CurrentStreak,
+                ScoreFormulaVersion = scoreFormulaVersion <= 0 ? ScoreConfig.DefaultFormulaVersion : scoreFormulaVersion,
                 ActiveBlocks = gameState.ActiveBlocks.GetShapeIds(),
                 ActiveBlockSlots = gameState.ActiveBlocks.GetSlotIds(),
+                ActiveBlockColorIds = activeBlockColorIds,
                 MoveCount = gameState.MoveCount,
                 TotalLinesCleared = gameState.TotalLinesCleared,
                 GameStartTime = gameState.StartTime,
@@ -137,7 +162,8 @@ namespace BlockPuzzle.Core.Persistence
                 {
                     TotalPlacements = spawnerStats.TotalPlacements,
                     RecentSuccessRate = spawnerStats.RecentSuccessRate,
-                    OverallSuccessRate = spawnerStats.OverallSuccessRate
+                    OverallSuccessRate = spawnerStats.OverallSuccessRate,
+                    RecentPlacementHistory = spawnerStats.RecentPlacementHistory
                 }
             };
         }
@@ -176,6 +202,16 @@ namespace BlockPuzzle.Core.Persistence
             else if (ActiveBlocks != null && ActiveBlocks.Length > 0)
             {
                 activeBlocks.SetBlocks(ActiveBlocks);
+            }
+
+            if (ActiveBlockColorIds != null && ActiveBlockColorIds.Length == 3)
+            {
+                for (int i = 0; i < ActiveBlockColorIds.Length; i++)
+                {
+                    int colorId = ActiveBlockColorIds[i];
+                    if (colorId > 0 && activeBlocks.HasBlockAt(i))
+                        activeBlocks.SetColorId(i, colorId);
+                }
             }
             gameState = gameState.WithActiveBlocks(activeBlocks);
             

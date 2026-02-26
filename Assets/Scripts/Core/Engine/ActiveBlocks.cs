@@ -16,6 +16,7 @@ namespace BlockPuzzle.Core.Engine
     {
         // FIXED 3 SLOTS - index = slot position, null = empty slot
         private readonly ShapeId?[] _slots = new ShapeId?[3];
+        private readonly int?[] _colorIds = new int?[3];
         
         /// <summary>
         /// Number of active blocks currently available (non-null slots).
@@ -38,6 +39,7 @@ namespace BlockPuzzle.Core.Engine
             for (int i = 0; i < 3; i++)
             {
                 _slots[i] = null;
+                _colorIds[i] = null;
             }
         }
         
@@ -62,6 +64,44 @@ namespace BlockPuzzle.Core.Engine
         {
             return GetBlock(slotIndex).ShapeId;
         }
+
+        /// <summary>
+        /// Gets the color ID of a block at slot (1-based, 1-8).
+        /// Returns 1 if not set.
+        /// </summary>
+        public int GetColorId(int slotIndex)
+        {
+            if (slotIndex < 0 || slotIndex >= 3)
+                return 1; // Varsayılan renk
+            return _colorIds[slotIndex].HasValue ? _colorIds[slotIndex].Value : 1;
+        }
+
+        /// <summary>
+        /// Tries to get an explicitly assigned color ID for a slot.
+        /// </summary>
+        public bool TryGetColorId(int slotIndex, out int colorId)
+        {
+            colorId = 0;
+
+            if (slotIndex < 0 || slotIndex >= 3)
+                return false;
+
+            if (!_colorIds[slotIndex].HasValue)
+                return false;
+
+            colorId = _colorIds[slotIndex].Value;
+            return colorId > 0;
+        }
+
+        /// <summary>
+        /// Sets the color ID for a block at slot.
+        /// </summary>
+        public void SetColorId(int slotIndex, int colorId)
+        {
+            if (slotIndex < 0 || slotIndex >= 3)
+                throw new ArgumentOutOfRangeException(nameof(slotIndex));
+            _colorIds[slotIndex] = colorId > 0 ? colorId : null;
+        }
         
         /// <summary>
         /// Checks if a block exists at the given SLOT.
@@ -83,6 +123,7 @@ namespace BlockPuzzle.Core.Engine
                 if (!_slots[i].HasValue)
                 {
                     _slots[i] = shapeId;
+                    _colorIds[i] = null;
                     return;
                 }
             }
@@ -97,6 +138,7 @@ namespace BlockPuzzle.Core.Engine
             if (slotIndex < 0 || slotIndex >= 3)
                 throw new ArgumentOutOfRangeException(nameof(slotIndex));
             _slots[slotIndex] = shapeId;
+            _colorIds[slotIndex] = null;
         }
         
         /// <summary>
@@ -109,6 +151,7 @@ namespace BlockPuzzle.Core.Engine
                 throw new ArgumentOutOfRangeException(nameof(slotIndex), $"Slot index {slotIndex} out of range [0, 3)");
             
             _slots[slotIndex] = null;
+            _colorIds[slotIndex] = null;
             // NOTE: Other slots KEEP their positions!
         }
         
@@ -147,6 +190,7 @@ namespace BlockPuzzle.Core.Engine
             for (int i = 0; i < 3; i++)
             {
                 _slots[i] = null;
+                _colorIds[i] = null;
             }
         }
         
@@ -204,6 +248,7 @@ namespace BlockPuzzle.Core.Engine
             for (int i = 0; i < 3; i++)
             {
                 clone._slots[i] = _slots[i];
+                clone._colorIds[i] = _colorIds[i];
             }
             return clone;
         }

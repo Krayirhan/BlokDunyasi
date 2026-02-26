@@ -8,6 +8,7 @@ using BlockPuzzle.Core.Common;
 namespace BlockPuzzle.Core.Tests.Board
 {
     [TestFixture]
+    [Category("Unit")]
     public class BoardCoordTests
     {
         [Test]

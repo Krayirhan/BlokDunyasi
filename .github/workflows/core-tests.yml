@@ -1,0 +1,98 @@
+name: Quality Gate - Core Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-suite:
+    name: "${{ matrix.category }} Tests"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        category:
+          - Unit
+          - Integration
+          - Regression
+          - Replay
+          - Performance
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Run ${{ matrix.category }} tests
+        env:
+          DOTNET_ROLL_FORWARD: LatestMajor
+        run: >
+          dotnet test Tests/BlockPuzzle.Core.Tests/BlockPuzzle.Core.Tests.csproj
+          --configuration Release
+          --verbosity minimal
+          --logger "trx;LogFileName=${{ matrix.category }}.trx"
+          --filter "TestCategory=${{ matrix.category }}"
+
+      - name: Upload test result artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.category }}
+          path: Tests/BlockPuzzle.Core.Tests/TestResults/
+          if-no-files-found: warn
+
+  coverage:
+    name: Coverage + Formula/Combo Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Run formula/combo coverage gate
+        env:
+          DOTNET_ROLL_FORWARD: LatestMajor
+        run: >
+          dotnet test Tests/BlockPuzzle.Core.Tests/BlockPuzzle.Core.Tests.csproj
+          --configuration Release
+          --verbosity minimal
+          /p:CollectCoverage=true
+          /p:Include='[BlockPuzzle.Core]BlockPuzzle.Core.Rules.*'
+          /p:Threshold=80
+          /p:ThresholdType=line
+          /p:ThresholdStat=total
+          /p:CoverletOutputFormat=cobertura
+          /p:CoverletOutput=TestResults/coverage-rules/
+
+      - name: Run full suite with coverage artifact
+        env:
+          DOTNET_ROLL_FORWARD: LatestMajor
+        run: >
+          dotnet test Tests/BlockPuzzle.Core.Tests/BlockPuzzle.Core.Tests.csproj
+          --configuration Release
+          --verbosity minimal
+          /p:CollectCoverage=true
+          /p:CoverletOutputFormat=cobertura
+          /p:CoverletOutput=TestResults/coverage/
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-coverage
+          path: Tests/BlockPuzzle.Core.Tests/TestResults/coverage/
+          if-no-files-found: error
+
+      - name: Upload rules coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-coverage-rules
+          path: Tests/BlockPuzzle.Core.Tests/TestResults/coverage-rules/
+          if-no-files-found: error

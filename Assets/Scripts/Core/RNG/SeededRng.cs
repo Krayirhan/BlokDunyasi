@@ -7,7 +7,7 @@ namespace BlockPuzzle.Core.RNG
     /// </summary>
     public class SeededRng
     {
-        private readonly System.Random _random;
+        private System.Random _random;
         
         /// <summary>
         /// Current seed value (for serialization/reproduction).
@@ -113,8 +113,7 @@ namespace BlockPuzzle.Core.RNG
         public void Reseed(int newSeed)
         {
             Seed = newSeed;
-            // Note: System.Random doesn't support re-seeding.
-            // Would need to replace with new instance for full implementation.
+            _random = new System.Random(newSeed);
         }
     }
 }

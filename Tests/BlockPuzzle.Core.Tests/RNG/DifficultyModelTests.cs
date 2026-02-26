@@ -5,6 +5,7 @@ using BlockPuzzle.Core.RNG;
 namespace BlockPuzzle.Core.Tests.RNG
 {
     [TestFixture]
+    [Category("Unit")]
     public class DifficultyModelTests
     {
         [Test]

@@ -155,6 +155,12 @@ namespace BlockPuzzle.Core.Persistence
         /// <param name="linesCleared">Lines cleared in this move</param>
         public void RecordMove(int moveScore, int linesCleared)
         {
+            if (moveScore < 0)
+                moveScore = 0;
+
+            if (linesCleared < 0)
+                linesCleared = 0;
+
             if (moveScore > HighestSingleMoveScore)
                 HighestSingleMoveScore = moveScore;
                 

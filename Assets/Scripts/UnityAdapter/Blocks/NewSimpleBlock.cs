@@ -18,6 +18,9 @@ namespace BlockPuzzle.UnityAdapter.Blocks
     /// </summary>
     public class NewSimpleBlock : MonoBehaviour
     {
+        // Statik Random instance - tüm bloklar aynı RNG'yi kullanır
+        private static readonly System.Random _rng = new System.Random();
+
         [Header("=== GRID MATCH SETTINGS ===")]
         [SerializeField] public float cellSize = 0.5f;
         [SerializeField] public float cellSpacing = 0f;
@@ -41,6 +44,12 @@ namespace BlockPuzzle.UnityAdapter.Blocks
             new Color(0.7f, 0.4f, 1f)     // Violet
         };
 
+        [Header("=== LIGHTING (INSPECTOR) ===")]
+        [SerializeField] [Range(0.5f, 2.0f)] private float trayBlockBrightness = 1.0f;
+        [SerializeField] [Range(1.0f, 2.0f)] private float dragBrightnessMultiplier = 1.2f;
+        [SerializeField] [Range(0f, 1f)] private float normalAlpha = 1.0f;
+        [SerializeField] [Range(0f, 1f)] private float dragAlpha = 0.9f;
+
         [Header("=== SPRITE CONFIG ===")]
         [SerializeField] private BlockSpriteConfig spriteConfig;
 
@@ -50,12 +59,14 @@ namespace BlockPuzzle.UnityAdapter.Blocks
         public bool IsUsed { get; private set; }
         public int SlotIndex { get; private set; }
         public Vector3 OriginalPosition { get; private set; }
+        public int ColorId { get; private set; }
 
         // Cell tracking
         private readonly List<GameObject> _cellObjects = new List<GameObject>();
+        private readonly Queue<GameObject> _cellPool = new Queue<GameObject>();
         private Sprite _defaultSprite;
 
-        public void Initialize(ShapeDefinition shape, BlockSpriteConfig config, int slotIndex = 0)
+        public void Initialize(ShapeDefinition shape, BlockSpriteConfig config, int slotIndex = 0, int colorId = -1)
         {
             if (shape == null)
             {
@@ -68,10 +79,39 @@ namespace BlockPuzzle.UnityAdapter.Blocks
             SlotIndex = slotIndex;
             IsUsed = false;
             OriginalPosition = transform.position;
+            // ColorId: parametreden alınırsa o kullanılır, değilse rastgele atanır
+            if (colorId > 0)
+            {
+                ColorId = colorId; // Verilen colorId kullan
+            }
+            else
+            {
+                int paletteSize = (blockColors != null && blockColors.Length > 0) ? blockColors.Length : 1;
+                ColorId = 1 + _rng.Next(paletteSize); // Statik RNG kullan
+            }
 
             CreateCellsAroundAnchor();
 
-            Debug.Log($"[NewSimpleBlock] Initialized: {shape.Name} with {shape.Offsets.Length} cells at slot {slotIndex}");
+            Debug.Log($"[NewSimpleBlock] Initialized: {shape.Name} with {shape.Offsets.Length} cells at slot {slotIndex}, colorId={ColorId}");
+        }
+
+        public void ApplyVisualSettings(Color[] palette, float brightness, float dragBrightness, float idleAlpha, float draggingAlpha)
+        {
+            if (palette != null && palette.Length > 0)
+            {
+                if (blockColors == null || blockColors.Length != palette.Length)
+                    blockColors = new Color[palette.Length];
+
+                for (int i = 0; i < palette.Length; i++)
+                    blockColors[i] = palette[i];
+            }
+
+            trayBlockBrightness = Mathf.Clamp(brightness, 0.5f, 2.0f);
+            dragBrightnessMultiplier = Mathf.Clamp(dragBrightness, 1.0f, 2.0f);
+            normalAlpha = Mathf.Clamp01(idleAlpha);
+            dragAlpha = Mathf.Clamp01(draggingAlpha);
+
+            RefreshVisuals();
         }
 
         /// <summary>
@@ -98,18 +138,39 @@ namespace BlockPuzzle.UnityAdapter.Blocks
                     0f
                 );
 
-                var cellObj = CreateCell($"Cell_{offset.X}_{offset.Y}", localPos, color, sprite);
+                var cellObj = AcquireCell($"Cell_{offset.X}_{offset.Y}");
+                ConfigureCell(cellObj, localPos, color, sprite);
                 _cellObjects.Add(cellObj);
             }
         }
 
-        private GameObject CreateCell(string name, Vector3 localPos, Color color, Sprite sprite)
+        private GameObject AcquireCell(string name)
         {
-            var go = new GameObject(name);
-            go.transform.SetParent(transform);
+            GameObject go;
+            if (_cellPool.Count > 0)
+            {
+                go = _cellPool.Dequeue();
+            }
+            else
+            {
+                go = new GameObject(name);
+                go.AddComponent<SpriteRenderer>();
+            }
+
+            go.name = name;
+            go.transform.SetParent(transform, false);
+            go.SetActive(true);
+            return go;
+        }
+
+        private void ConfigureCell(GameObject go, Vector3 localPos, Color color, Sprite sprite)
+        {
             go.transform.localPosition = localPos;
 
-            var sr = go.AddComponent<SpriteRenderer>();
+            var sr = go.GetComponent<SpriteRenderer>();
+            if (sr == null)
+                sr = go.AddComponent<SpriteRenderer>();
+
             sr.sprite = sprite;
             sr.color = color;
             sr.sortingOrder = normalSortingOrder;
@@ -118,15 +179,13 @@ namespace BlockPuzzle.UnityAdapter.Blocks
             float spriteSize = sprite != null && sprite.bounds.size.x > 0 ? sprite.bounds.size.x : 1f;
             float scale = cellSize / spriteSize;
             go.transform.localScale = new Vector3(scale, scale, 1f);
-
-            return go;
         }
 
         private Sprite GetCellSprite()
         {
             if (spriteConfig != null)
             {
-                var sprite = spriteConfig.GetBlockSprite(SlotIndex);
+                var sprite = spriteConfig.GetBlockSpriteByColorId(ColorId);
                 if (sprite != null) return sprite;
             }
 
@@ -150,9 +209,7 @@ namespace BlockPuzzle.UnityAdapter.Blocks
 
         private Color GetBlockColor()
         {
-            if (blockColors == null || blockColors.Length == 0)
-                return Color.magenta;
-            return blockColors[SlotIndex % blockColors.Length];
+            return ApplyLighting(GetPaletteColor(), trayBlockBrightness, normalAlpha);
         }
 
         // === DRAG OPERATIONS ===
@@ -201,9 +258,10 @@ namespace BlockPuzzle.UnityAdapter.Blocks
         {
             transform.localScale = dragging ? dragScale : normalScale;
             int order = dragging ? dragSortingOrder : normalSortingOrder;
-            Color baseColor = GetBlockColor();
-            Color color = dragging ? (baseColor * 1.2f) : baseColor;
-            color.a = dragging ? 0.9f : 1f;
+            Color paletteColor = GetPaletteColor();
+            Color color = dragging
+                ? ApplyLighting(paletteColor, trayBlockBrightness * dragBrightnessMultiplier, dragAlpha)
+                : ApplyLighting(paletteColor, trayBlockBrightness, normalAlpha);
 
             foreach (var cell in _cellObjects)
             {
@@ -217,12 +275,42 @@ namespace BlockPuzzle.UnityAdapter.Blocks
             }
         }
 
+        private void RefreshVisuals()
+        {
+            ApplyDragVisuals(IsDragging);
+        }
+
+        private Color GetPaletteColor()
+        {
+            if (blockColors == null || blockColors.Length == 0)
+                return Color.magenta;
+
+            int colorIndex = (ColorId - 1) % blockColors.Length;
+            if (colorIndex < 0)
+                colorIndex += blockColors.Length;
+
+            return blockColors[colorIndex];
+        }
+
+        private Color ApplyLighting(Color baseColor, float brightness, float alpha)
+        {
+            Color lit = baseColor * brightness;
+            lit.r = Mathf.Clamp01(lit.r);
+            lit.g = Mathf.Clamp01(lit.g);
+            lit.b = Mathf.Clamp01(lit.b);
+            lit.a = alpha;
+            return lit;
+        }
+
         private void ClearCells()
         {
             foreach (var cell in _cellObjects)
             {
                 if (cell != null)
-                    Destroy(cell);
+                {
+                    cell.SetActive(false);
+                    _cellPool.Enqueue(cell);
+                }
             }
             _cellObjects.Clear();
         }
@@ -302,6 +390,19 @@ namespace BlockPuzzle.UnityAdapter.Blocks
             Gizmos.color = IsDragging ? Color.yellow : Color.cyan;
             var bounds = GetBounds();
             Gizmos.DrawWireCube(bounds.center, bounds.size);
+        }
+
+        private void OnValidate()
+        {
+            trayBlockBrightness = Mathf.Clamp(trayBlockBrightness, 0.5f, 2.0f);
+            dragBrightnessMultiplier = Mathf.Clamp(dragBrightnessMultiplier, 1.0f, 2.0f);
+            normalAlpha = Mathf.Clamp01(normalAlpha);
+            dragAlpha = Mathf.Clamp01(dragAlpha);
+
+            if (Application.isPlaying)
+            {
+                RefreshVisuals();
+            }
         }
     }
 }

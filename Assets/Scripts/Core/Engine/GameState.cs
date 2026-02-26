@@ -168,7 +168,7 @@ namespace BlockPuzzle.Core.Engine
         public GameState WithScore(int newScore)
         {
             var newState = Clone();
-            newState.Score = newScore;
+            newState.Score = newScore < 0 ? 0 : newScore;
             return newState;
         }
         
@@ -214,7 +214,8 @@ namespace BlockPuzzle.Core.Engine
         public GameState WithIncrementedMoveCount()
         {
             var newState = Clone();
-            newState.MoveCount++;
+            if (newState.MoveCount < int.MaxValue)
+                newState.MoveCount++;
             newState.LastMoveTime = DateTime.Now;
             return newState;
         }
@@ -232,12 +233,16 @@ namespace BlockPuzzle.Core.Engine
         /// <summary>
         /// Creates a new game state with updated lines cleared count.
         /// </summary>
-        /// <param name="additionalLines">Number of lines to add to total</param>
+        /// <param name="linesClearedThisMove">Number of lines cleared in this move</param>
         /// <returns>New GameState with updated lines cleared</returns>
-        public GameState WithLinesCleared(int additionalLines)
+        public GameState WithLinesCleared(int linesClearedThisMove)
         {
+            if (linesClearedThisMove < 0)
+                throw new ArgumentOutOfRangeException(nameof(linesClearedThisMove), "Lines cleared cannot be negative.");
+
             var newState = Clone();
-            newState.TotalLinesCleared += additionalLines;
+            long nextTotal = (long)newState.TotalLinesCleared + linesClearedThisMove;
+            newState.TotalLinesCleared = nextTotal > int.MaxValue ? int.MaxValue : (int)nextTotal;
             return newState;
         }
 
