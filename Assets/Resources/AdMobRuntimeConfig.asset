@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a4bda7f1e3c84a8a9b0c1d2e3f4a5b6c, type: 3}
+  m_Name: AdMobRuntimeConfig
+  m_EditorClassIdentifier: 
+  loadAdsOnStartup: 1
+  useGoogleTestAdUnits: 0
+  forceGoogleTestAdsInDebugBuilds: 1
+  testDeviceHashedIds: []
+  tagForUnderAgeOfConsent: 0
+  showBannerOnAllScenes: 1
+  showBannerOnNonGameplayScenes: 1
+  bannerSceneNames:
+  - MainMenu
+  - Scores
+  - Settings
+  - "OyunEkran\u0131"
+  - GameOver
+  enableInterstitialOnGameOverScene: 1
+  minimumCompletedSessionsBeforeInterstitial: 2
+  minimumSecondsBetweenInterstitials: 180
+  maxInterstitialsPerSession: 1
+  cooldownAfterRewardedSeconds: 90
+  enableAnalyticsFileLogging: 1
+  androidBannerAdUnitId: ca-app-pub-1185594059702325/9628383743
+  androidInterstitialAdUnitId: ca-app-pub-1185594059702325/4328923203
+  androidRewardedAdUnitId: ca-app-pub-1185594059702325/6815218840
+  iosBannerAdUnitId: 
+  iosInterstitialAdUnitId: 
+  iosRewardedAdUnitId: 

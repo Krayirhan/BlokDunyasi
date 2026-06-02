@@ -43,6 +43,18 @@ namespace BlockPuzzle.Core.Tests.Board
         }
 
         [Test]
+        public void CanPlace_OutOfBoundsAndCollision_PrioritizesOutOfBounds()
+        {
+            var board = new BoardState(4, 4);
+            board.FillCell(3, 1, blockId: 1, colorId: 1);
+            var offsets = new[] { new Int2(1, 0), new Int2(0, 0) };
+
+            var result = PlacementEngine.CanPlace(board, 3, 1, offsets);
+
+            Assert.AreEqual(PlacementResult.OutOfBounds, result);
+        }
+
+        [Test]
         public void PlaceAtomic_Success_FillsCellsAndReturnsPlacedCount()
         {
             var board = new BoardState(4, 4);

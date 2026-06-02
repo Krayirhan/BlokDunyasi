@@ -1,4 +1,5 @@
 using UnityEngine;
+using Debug = BlockPuzzle.Core.Common.GameLogger;
 
 public class SettingsScreenSetup : MonoBehaviour
 {

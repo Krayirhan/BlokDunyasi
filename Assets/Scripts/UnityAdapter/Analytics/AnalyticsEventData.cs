@@ -21,6 +21,9 @@ namespace BlockPuzzle.UnityAdapter.Analytics
         public readonly bool IsScoreAnomaly;
         public readonly string ScoreAnomalyCode;
         public readonly long TimestampUnixMs;
+        public readonly string GameMode;
+        public readonly int DailyMissionCompletions;
+        public readonly int WeeklyMissionCompletions;
 
         public AnalyticsEventData(
             string eventName,
@@ -36,7 +39,10 @@ namespace BlockPuzzle.UnityAdapter.Analytics
             bool isNewBest,
             bool isScoreAnomaly,
             string scoreAnomalyCode,
-            long timestampUnixMs)
+            long timestampUnixMs,
+            string gameMode,
+            int dailyMissionCompletions,
+            int weeklyMissionCompletions)
         {
             EventName = eventName ?? string.Empty;
             SchemaVersion = schemaVersion;
@@ -52,6 +58,9 @@ namespace BlockPuzzle.UnityAdapter.Analytics
             IsScoreAnomaly = isScoreAnomaly;
             ScoreAnomalyCode = scoreAnomalyCode ?? string.Empty;
             TimestampUnixMs = timestampUnixMs;
+            GameMode = gameMode ?? string.Empty;
+            DailyMissionCompletions = dailyMissionCompletions;
+            WeeklyMissionCompletions = weeklyMissionCompletions;
         }
 
         public DateTimeOffset Timestamp => DateTimeOffset.FromUnixTimeMilliseconds(TimestampUnixMs);

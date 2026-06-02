@@ -1,5 +1,6 @@
 // File: Core/Persistence/GameData.cs
 using System;
+using System.Collections.Generic;
 using BlockPuzzle.Core.Board;
 using BlockPuzzle.Core.Engine;
 using BlockPuzzle.Core.RNG;
@@ -15,10 +16,17 @@ namespace BlockPuzzle.Core.Persistence
     [Serializable]
     public class GameData
     {
+        public const int LegacySaveVersion1 = 1;
+        public const int LegacySaveVersion2 = 2;
+        public const int LegacySaveVersion3 = 3;
+        public const int CurrentSaveVersion = 4;
+        private const int DefaultBoardWidth = 10;
+        private const int DefaultBoardHeight = 10;
+
         /// <summary>
         /// Version of this save data format (for backwards compatibility).
         /// </summary>
-        public int SaveVersion { get; set; } = 2;
+        public int SaveVersion { get; set; } = CurrentSaveVersion;
         
         /// <summary>
         /// Timestamp when this save was created.
@@ -49,6 +57,11 @@ namespace BlockPuzzle.Core.Persistence
         /// Current combo streak.
         /// </summary>
         public int ComboStreak { get; set; }
+
+        /// <summary>
+        /// Remaining setup-move grace allowance before the combo breaks.
+        /// </summary>
+        public int ComboGraceMovesRemaining { get; set; }
 
         /// <summary>
         /// Score formula version used when this save was written.
@@ -142,11 +155,13 @@ namespace BlockPuzzle.Core.Persistence
             return new GameData
             {
                 SaveTime = DateTime.Now,
+                SaveVersion = CurrentSaveVersion,
                 BoardCells = gameState.Board.GetCells(),
                 BoardWidth = gameState.Board.Width,
                 BoardHeight = gameState.Board.Height,
                 Score = gameState.Score,
                 ComboStreak = gameState.ComboState.CurrentStreak,
+                ComboGraceMovesRemaining = gameState.ComboState.GraceMovesRemaining,
                 ScoreFormulaVersion = scoreFormulaVersion <= 0 ? ScoreConfig.DefaultFormulaVersion : scoreFormulaVersion,
                 ActiveBlocks = gameState.ActiveBlocks.GetShapeIds(),
                 ActiveBlockSlots = gameState.ActiveBlocks.GetSlotIds(),
@@ -167,6 +182,55 @@ namespace BlockPuzzle.Core.Persistence
                 }
             };
         }
+
+        /// <summary>
+        /// Migrates loaded save data to the current version and sanitizes required fields.
+        /// </summary>
+        public GameDataMigrationResult MigrateToCurrentInPlace()
+        {
+            int sourceVersion = NormalizeIncomingVersion(SaveVersion);
+            if (sourceVersion > CurrentSaveVersion)
+                throw new NotSupportedException(
+                    $"Save version {sourceVersion} is newer than supported current version {CurrentSaveVersion}.");
+
+            SaveVersion = sourceVersion;
+            bool migrated = false;
+            bool sanitized = false;
+            var notes = new List<string>();
+
+            while (SaveVersion < LegacySaveVersion2)
+            {
+                MigrateV1ToV2();
+                migrated = true;
+                notes.Add("v1->v2 applied.");
+            }
+
+            while (SaveVersion < LegacySaveVersion3)
+            {
+                MigrateV2ToV3();
+                migrated = true;
+                notes.Add("v2->v3 applied.");
+            }
+
+            while (SaveVersion < CurrentSaveVersion)
+            {
+                MigrateV3ToV4();
+                migrated = true;
+                notes.Add("v3->v4 applied.");
+            }
+
+            if (ValidateAndSanitizeInPlace(notes))
+                sanitized = true;
+
+            SaveVersion = CurrentSaveVersion;
+
+            return new GameDataMigrationResult(
+                sourceVersion,
+                CurrentSaveVersion,
+                migrated,
+                sanitized,
+                notes.Count == 0 ? "Save data already current and valid." : string.Join(" ", notes));
+        }
         
         /// <summary>
         /// Converts this GameData back to a GameState.
@@ -175,6 +239,8 @@ namespace BlockPuzzle.Core.Persistence
         /// <returns>GameState from this save data</returns>
         public GameState ToGameState()
         {
+            MigrateToCurrentInPlace();
+
             var gameState = new GameState(BoardWidth, BoardHeight);
             
             // Restore board cells
@@ -185,7 +251,10 @@ namespace BlockPuzzle.Core.Persistence
             
             // Restore combo state
             var comboState = new Rules.ComboState();
-            comboState.SetStreak(ComboStreak);
+            int restoredGrace = ComboGraceMovesRemaining > 0
+                ? ComboGraceMovesRemaining
+                : (ComboStreak > 0 ? 1 : 0);
+            comboState.SetState(ComboStreak, restoredGrace);
             gameState = gameState.WithComboState(comboState);
             
             // Restore active blocks
@@ -228,6 +297,218 @@ namespace BlockPuzzle.Core.Persistence
             }
             
             return gameState;
+        }
+
+        private static int NormalizeIncomingVersion(int saveVersion)
+        {
+            return saveVersion <= 0 ? LegacySaveVersion1 : saveVersion;
+        }
+
+        private void MigrateV1ToV2()
+        {
+            EnsureActiveBlockSlotsFromLegacyArray();
+            SaveVersion = LegacySaveVersion2;
+        }
+
+        private void MigrateV2ToV3()
+        {
+            EnsureActiveBlockSlotsFromLegacyArray();
+            EnsureActiveBlockColorIds();
+
+            if (ScoreFormulaVersion <= 0)
+                ScoreFormulaVersion = ScoreConfig.DefaultFormulaVersion;
+
+            if (ComboStreak > 0 && ComboGraceMovesRemaining <= 0)
+                ComboGraceMovesRemaining = 1;
+
+            SaveVersion = LegacySaveVersion3;
+        }
+
+        private void MigrateV3ToV4()
+        {
+            EnsureActiveBlockSlotsFromLegacyArray();
+            EnsureActiveBlockColorIds();
+            EnsureLegacyActiveBlocksArrayFromSlots();
+            SaveVersion = CurrentSaveVersion;
+        }
+
+        private bool ValidateAndSanitizeInPlace(List<string> notes)
+        {
+            bool sanitized = false;
+
+            if (BoardWidth <= 0)
+            {
+                BoardWidth = DefaultBoardWidth;
+                sanitized = true;
+                notes.Add("BoardWidth defaulted.");
+            }
+
+            if (BoardHeight <= 0)
+            {
+                BoardHeight = DefaultBoardHeight;
+                sanitized = true;
+                notes.Add("BoardHeight defaulted.");
+            }
+
+            int expectedCellCount = checked(BoardWidth * BoardHeight);
+            if (BoardCells == null)
+            {
+                BoardCells = new CellState[expectedCellCount];
+                sanitized = true;
+                notes.Add("BoardCells created empty.");
+            }
+            else if (BoardCells.Length != expectedCellCount)
+            {
+                BoardCells = new CellState[expectedCellCount];
+                sanitized = true;
+                notes.Add("BoardCells length mismatch sanitized to empty board.");
+            }
+
+            if (Score < 0)
+            {
+                Score = 0;
+                sanitized = true;
+                notes.Add("Score clamped.");
+            }
+
+            if (MoveCount < 0)
+            {
+                MoveCount = 0;
+                sanitized = true;
+                notes.Add("MoveCount clamped.");
+            }
+
+            if (TotalLinesCleared < 0)
+            {
+                TotalLinesCleared = 0;
+                sanitized = true;
+                notes.Add("TotalLinesCleared clamped.");
+            }
+
+            if (ComboStreak < 0)
+            {
+                ComboStreak = 0;
+                sanitized = true;
+                notes.Add("ComboStreak clamped.");
+            }
+
+            if (ComboGraceMovesRemaining < 0)
+            {
+                ComboGraceMovesRemaining = 0;
+                sanitized = true;
+                notes.Add("ComboGraceMovesRemaining clamped.");
+            }
+
+            if (ScoreFormulaVersion <= 0)
+            {
+                ScoreFormulaVersion = ScoreConfig.DefaultFormulaVersion;
+                sanitized = true;
+                notes.Add("ScoreFormulaVersion defaulted.");
+            }
+
+            if (ActiveBlocks == null)
+            {
+                ActiveBlocks = Array.Empty<ShapeId>();
+                sanitized = true;
+                notes.Add("ActiveBlocks defaulted.");
+            }
+
+            if (SpawnerData == null)
+            {
+                SpawnerData = new SpawnerSaveData();
+                sanitized = true;
+                notes.Add("SpawnerData defaulted.");
+            }
+
+            if (SpawnerData.RecentPlacementHistory == null)
+            {
+                SpawnerData.RecentPlacementHistory = Array.Empty<bool>();
+                sanitized = true;
+                notes.Add("RecentPlacementHistory defaulted.");
+            }
+
+            if (ActiveBlockSlots == null || ActiveBlockSlots.Length != 3)
+            {
+                EnsureActiveBlockSlotsFromLegacyArray();
+                sanitized = true;
+                notes.Add("ActiveBlockSlots rebuilt.");
+            }
+
+            if (ActiveBlockColorIds == null || ActiveBlockColorIds.Length != 3)
+            {
+                EnsureActiveBlockColorIds();
+                sanitized = true;
+                notes.Add("ActiveBlockColorIds rebuilt.");
+            }
+
+            EnsureLegacyActiveBlocksArrayFromSlots();
+            return sanitized;
+        }
+
+        private void EnsureActiveBlockSlotsFromLegacyArray()
+        {
+            if (ActiveBlockSlots != null && ActiveBlockSlots.Length == 3)
+                return;
+
+            ActiveBlockSlots = new[] { -1, -1, -1 };
+            if (ActiveBlocks == null)
+                return;
+
+            int count = Math.Min(3, ActiveBlocks.Length);
+            for (int i = 0; i < count; i++)
+                ActiveBlockSlots[i] = ActiveBlocks[i].Value;
+        }
+
+        private void EnsureActiveBlockColorIds()
+        {
+            if (ActiveBlockColorIds != null && ActiveBlockColorIds.Length == 3)
+                return;
+
+            ActiveBlockColorIds = new int[3];
+        }
+
+        private void EnsureLegacyActiveBlocksArrayFromSlots()
+        {
+            if (ActiveBlockSlots == null || ActiveBlockSlots.Length != 3)
+            {
+                ActiveBlocks = Array.Empty<ShapeId>();
+                return;
+            }
+
+            int count = 0;
+            for (int i = 0; i < ActiveBlockSlots.Length; i++)
+            {
+                if (ActiveBlockSlots[i] >= 0)
+                    count++;
+            }
+
+            var shapeIds = new ShapeId[count];
+            int writeIndex = 0;
+            for (int i = 0; i < ActiveBlockSlots.Length; i++)
+            {
+                if (ActiveBlockSlots[i] >= 0)
+                    shapeIds[writeIndex++] = new ShapeId(ActiveBlockSlots[i]);
+            }
+
+            ActiveBlocks = shapeIds;
+        }
+    }
+
+    public readonly struct GameDataMigrationResult
+    {
+        public readonly int SourceVersion;
+        public readonly int TargetVersion;
+        public readonly bool Migrated;
+        public readonly bool Sanitized;
+        public readonly string Note;
+
+        public GameDataMigrationResult(int sourceVersion, int targetVersion, bool migrated, bool sanitized, string note)
+        {
+            SourceVersion = sourceVersion;
+            TargetVersion = targetVersion;
+            Migrated = migrated;
+            Sanitized = sanitized;
+            Note = note;
         }
     }
     

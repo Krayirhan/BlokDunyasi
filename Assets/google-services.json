@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "634547612378",
+    "project_id": "blokdunyasi",
+    "storage_bucket": "blokdunyasi.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:634547612378:android:14d2ce29153ae91c0813e3",
+        "android_client_info": {
+          "package_name": "com.krayirhanstudio.blokdunyasi"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "634547612378-cc44jc22i3lq97rmvuuivhsgv4p56a47.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyApGB0x2kz6e91SawtTVgVD2XwsE_QQG5Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "634547612378-cc44jc22i3lq97rmvuuivhsgv4p56a47.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

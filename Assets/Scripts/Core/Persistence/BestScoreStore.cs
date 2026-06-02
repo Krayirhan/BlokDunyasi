@@ -1,4 +1,6 @@
 // File: Core/Persistence/BestScoreStore.cs
+using BlockPuzzle.Core.Common;
+
 namespace BlockPuzzle.Core.Persistence
 {
     /// <summary>
@@ -6,7 +8,7 @@ namespace BlockPuzzle.Core.Persistence
     /// </summary>
     public sealed class BestScoreStore : IBestScoreStore
     {
-        private const string BEST_SCORE_KEY = "BlokDunyasi_BestScore";
+        private const string BEST_SCORE_KEY = SettingsKeys.BestScore;
         private readonly IStorageProvider _storage;
         private int _cachedBestScore;
         private bool _cacheValid;

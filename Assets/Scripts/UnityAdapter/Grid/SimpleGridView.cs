@@ -1,30 +1,42 @@
-using UnityEngine;
 using System.Collections.Generic;
 using BlockPuzzle.Core.Board;
 using BlockPuzzle.Core.Common;
+using BlockPuzzle.UnityAdapter.Blocks;
 using BlockPuzzle.UnityAdapter.Boot;
 using BlockPuzzle.UnityAdapter.Configuration;
 using BlockPuzzle.UnityAdapter.Components;
+using UnityEngine;
 
 namespace BlockPuzzle.UnityAdapter.Grid
 {
     /// <summary>
-    /// Basit, temiz grid sistemi. Tek sorumluluk: Grid görselleştirme ve world<->grid dönüşümü.
+    /// Facade/owner for grid rendering and world/grid coordinate bridge.
+    /// Preview, line-clear FX and backdrop visuals are delegated to helper renderers.
+    ///
+    /// Important:
+    /// - Board/grid convention is TOP-LEFT origin.
+    /// - (0,0) is top-left.
+    /// - X increases right.
+    /// - Y increases downward.
+    /// - Drag placement is handled by the input system; this view renders only the board.
     /// </summary>
+    [ExecuteAlways]
     public class SimpleGridView : MonoBehaviour
     {
-        [Header("📁 CONFIGURATION")]
+        [Header("CONFIGURATION")]
         [SerializeField] private BlockSpriteConfig spriteConfig;
 
-        [Header("⚙️ GRID SETTINGS")]
-        [SerializeField] [Range(0.3f, 1.0f)] private float cellSize = 0.5f;
-        [SerializeField] [Range(0f, 0.2f)] private float cellSpacing = 0f;
+        [Header("THEME")]
+        [SerializeField] private ThemeConfig themeConfig;
 
-        [Header("🎨 COLORS")]
-        [SerializeField] private Color emptyCellColor = new Color(0.12f, 0.15f, 0.25f, 1f);
-        [SerializeField] private Color filledCellColor = new Color(0.8f, 0.8f, 0.8f, 1f);
+        [Header("VISUAL SYNC")]
+        [SerializeField] private bool mirrorTrayBlockVisuals = true;
+        [SerializeField] private NewBlockTray sourceTray;
 
-        [Header("🌈 BLOCK COLOR PALETTE (Match SimpleBlock)")]
+        [Header("SPRITE MODE")]
+        [SerializeField] private bool preferAssignedBlockSprites = true;
+
+        [Header("BLOCK COLOR PALETTE (Match SimpleBlock)")]
         [SerializeField] private Color[] blockColors =
         {
             new Color(0.9f, 0.3f, 0.8f),
@@ -36,123 +48,237 @@ namespace BlockPuzzle.UnityAdapter.Grid
             new Color(0.9f, 0.8f, 0.1f),
             new Color(0.7f, 0.4f, 1f)
         };
+
         [Header("BLOCK LIGHTING (Inspector)")]
         [SerializeField] [Range(0.5f, 2.0f)] private float placedBlockBrightness = 1.0f;
         [SerializeField] [Range(0f, 1f)] private float placedBlockAlpha = 1.0f;
+        [SerializeField] private bool useFlatEmptyCellFill = true;
+        [SerializeField] private Color emptyCellColor = new Color(0.12f, 0.15f, 0.25f, 1f);
+        [SerializeField] [Range(0.5f, 1.2f)] private float emptyCellScale = 1.0f;
+        [SerializeField] [Range(0f, 1f)] private float emptyCellAlpha = 1.0f;
+        [SerializeField] private bool useRoundedEmptyCellSprite = true;
+        [SerializeField] [Range(0f, 0.5f)] private float emptyCellCornerRadius = 0.22f;
+        [SerializeField] [Range(0.5f, 1.2f)] private float filledCellScale = 1.0f;
+        [SerializeField] private bool useFlatFilledCellTint = false;
+        [SerializeField] private bool useFilledCellTintOverride = false;
+        [SerializeField] private Color filledCellTintOverride = Color.white;
+        [SerializeField] private bool useRoundedFilledCellSprite = false;
+        [SerializeField] [Range(0f, 0.5f)] private float filledCellCornerRadius = 0.18f;
+        [SerializeField] private bool showCellBorders = true;
+        [SerializeField] private Color emptyCellBorderColor = new Color(0.3f, 0.38f, 0.55f, 0.65f);
+        [SerializeField] private Color filledCellBorderColor = new Color(1f, 1f, 1f, 0.18f);
+        [SerializeField] [Range(0f, 0.2f)] private float cellBorderThicknessInCells = 0.06f;
 
-        [Header("LINE CLEAR PREVIEW")]
-        [SerializeField] private Color linePreviewTintFilled = new Color(1f, 0.9f, 0.35f, 1f);
-        [SerializeField] private Color linePreviewTintEmpty = new Color(0.45f, 0.8f, 1f, 1f);
-        [SerializeField] [Range(0f, 1f)] private float linePreviewBlendFilled = 0.28f;
-        [SerializeField] [Range(0f, 1f)] private float linePreviewBlendEmpty = 0.18f;
-        [SerializeField] [Range(0f, 1f)] private float linePreviewValueBoost = 0.08f;
+        [Header("Grid Layout")]
+        [SerializeField] private Vector2 gridOffset = Vector2.zero;
+        [SerializeField] [Range(0.2f, 2.0f)] private float cellSize = 0.95f;
+        [SerializeField] [Range(0f, 0.5f)] private float cellSpacing = 0.05f;
 
-        [Header("LINE PREVIEW OUTER GLOW")]
-        [SerializeField] private bool enableLinePreviewOuterGlow = true;
-        [SerializeField] private Color linePreviewGlowColor = new Color(1f, 0.95f, 0.35f, 0.6f);
-        [SerializeField] [Range(1f, 1.6f)] private float linePreviewGlowScale = 1.2f;
-
-        [Header("BOARD BACKDROP")]
+        [Header("Backdrop")]
         [SerializeField] private bool showBoardBackdrop = true;
+        [SerializeField] private Sprite customBackdropSprite;
+        [SerializeField] private bool useRoundedBackdropSprite = true;
+        [SerializeField] [Range(0f, 0.5f)] private float boardBackdropCornerRadius = 0.08f;
+        [SerializeField] [Range(0f, 0.5f)] private float boardBackdropBorderCornerRadius = 0.1f;
         [SerializeField] private Color boardBackdropColor = new Color(0.06f, 0.1f, 0.2f, 0.55f);
-        [SerializeField] [Range(0f, 2f)] private float boardBackdropPaddingInCells = 0.35f;
+        [SerializeField] [Range(-2f, 5f)] private float boardBackdropPaddingInCells = 0.35f;
+        [SerializeField] private Vector2 backdropOffset = Vector2.zero;
         [SerializeField] private bool showBoardBackdropBorder = true;
         [SerializeField] private Color boardBackdropBorderColor = new Color(0.75f, 0.9f, 1f, 0.12f);
         [SerializeField] [Range(0f, 1f)] private float boardBackdropBorderThicknessInCells = 0.12f;
         [SerializeField] [Range(-20, 20)] private int boardBackdropSortingOrder = -2;
 
+        [Header("Placement Preview")]
+        [SerializeField] [Range(0.1f, 1f)] private float dropPreviewAlpha = 0.48f;
+        [SerializeField] [Range(0.75f, 1.15f)] private float dropPreviewScale = 0.92f;
+        [SerializeField] [Range(0.8f, 1.5f)] private float dropPreviewBrightness = 1.08f;
+        [SerializeField] [Range(0f, 0.5f)] private float dropPreviewCornerRadius = 0.18f;
+        [SerializeField] private int dropPreviewSortingOrder = 30;
+
+        [Header("LINE CLEAR PREVIEW")]
+        [SerializeField] private bool enableLineClearPreviewPulse = true;
+        [SerializeField] private Color lineClearPreviewColor = new Color(0.75f, 0.95f, 1f, 1f);
+        [SerializeField] [Range(0.05f, 0.8f)] private float lineClearPreviewMinAlpha = 0.16f;
+        [SerializeField] [Range(0.05f, 0.9f)] private float lineClearPreviewMaxAlpha = 0.34f;
+        [SerializeField] [Range(0.95f, 1.2f)] private float lineClearPreviewBaseScale = 1.07f;
+        [SerializeField] [Range(0f, 0.12f)] private float lineClearPreviewPulseScale = 0.03f;
+        [SerializeField] [Range(0.25f, 4f)] private float lineClearPreviewPulseSpeed = 2.2f;
+        [SerializeField] private int lineClearPreviewSortingOrder = 4;
+
         private SimpleCell[,] _cells;
-        private SpriteRenderer[,] _linePreviewGlow;
-        private SpriteRenderer _boardBackdropRenderer;
-        private SpriteRenderer _boardBackdropBorderRenderer;
+        private readonly GridBackdropView _backdropView = new GridBackdropView();
+        private readonly GridPreviewRenderer _previewRenderer = new GridPreviewRenderer();
+        private readonly GridLineClearFx _lineClearFx = new GridLineClearFx();
         private int _width;
         private int _height;
         private bool _isInitialized;
         private BoardState _lastBoardState;
         private Sprite _cachedDefaultSquareSprite;
-
-        // Highlight state
-        private readonly HashSet<(int x, int y)> _highlightedCells = new HashSet<(int, int)>();
+        private readonly Dictionary<int, Sprite> _roundedSpriteCache = new Dictionary<int, Sprite>();
+        private int _lastVisualSettingsVersion = -1;
+        private bool _loggedSourceTrayFallbackWarning;
+        private float _nextRuntimeReferenceResolveTime;
+        private const float RuntimeReferenceResolveIntervalSeconds = 0.5f;
+        private static readonly Color InvalidPlacementPreviewColor = new Color(1f, 0.25f, 0.55f, 1f);
+        private const float ValidPlacementPreviewAlpha = 0.62f;
+        private const float InvalidPlacementPreviewAlpha = 0.35f;
+        private const float PlacementPreviewScale = 0.96f;
+        private const int PlacementPreviewSortingOrder = 30;
 
         public float CellSize => cellSize;
         public float CellSpacing => cellSpacing;
-        public float TotalCellSize => cellSize + cellSpacing;
+        public float TotalCellSize => CellSize + CellSpacing;
+        public Vector2 GridOffset => gridOffset;
         public int Width => _width;
         public int Height => _height;
+        public BlockSpriteConfig SpriteConfig => spriteConfig;
+        public Color EmptyCellColor => emptyCellColor;
+        public bool ShowBoardBackdrop => showBoardBackdrop;
+        public Color BoardBackdropColor => boardBackdropColor;
+        public float BoardBackdropPaddingInCells => boardBackdropPaddingInCells;
+        public bool ShowBoardBackdropBorder => showBoardBackdropBorder;
+        public Color BoardBackdropBorderColor => boardBackdropBorderColor;
+        public float BoardBackdropBorderThicknessInCells => boardBackdropBorderThicknessInCells;
+        public int BoardBackdropSortingOrder => boardBackdropSortingOrder;
+        public float FilledCellScale => filledCellScale;
+
+        public void ApplyThemeSpriteConfig(BlockSpriteConfig config)
+        {
+            spriteConfig = config;
+
+            if (_isInitialized)
+                RefreshInspectorDrivenVisuals();
+        }
 
         public Vector3 GetWorldPosition(int x, int y)
         {
-            float totalSize = cellSize + cellSpacing;
-            return transform.position + new Vector3(
-                (x - (_width - 1) * 0.5f) * totalSize,
-                ((_height - 1) * 0.5f - y) * totalSize,
-                0
-            );
+            Vector3 origin = transform.position + (Vector3)GridOffset;
+            return CoordinateMapper.GridToWorldPosition(x, y, _width, _height, TotalCellSize, origin);
+        }
+
+        public Transform GetCellTransform(int x, int y)
+        {
+            if (x < 0 || x >= _width || y < 0 || y >= _height || _cells == null || _cells[x, y] == null)
+                return null;
+
+            return _cells[x, y].transform;
+        }
+
+        public void ForceCellEmptyVisual(int x, int y)
+        {
+            if (x < 0 || x >= _width || y < 0 || y >= _height || _cells == null || _cells[x, y] == null)
+                return;
+
+            SetCellEmptyVisual(x, y, _cells[x, y].transform);
         }
 
         public bool GetGridPosition(Vector3 worldPos, out int x, out int y)
         {
-            Vector3 localPos = worldPos - transform.position;
-            float totalSize = cellSize + cellSpacing;
-
-            x = Mathf.RoundToInt(localPos.x / totalSize + (_width - 1) * 0.5f);
-            y = Mathf.RoundToInt((_height - 1) * 0.5f - localPos.y / totalSize);
-
-            return x >= 0 && x < _width && y >= 0 && y < _height;
+            Vector3 origin = transform.position + (Vector3)GridOffset;
+            return CoordinateMapper.WorldToGridPosition(worldPos, _width, _height, TotalCellSize, origin, out x, out y);
         }
 
-        private void Start()
+        private void Awake()
         {
-            GameBootstrap.OnBoardChanged += OnBoardChanged;
+            ResolveRuntimeReferences();
+        }
+
+        private void OnEnable()
+        {
+            if (Application.isPlaying)
+            {
+                GameBootstrap.OnBoardChanged += OnBoardChanged;
+                _lastVisualSettingsVersion = ProjectColorGrading.SettingsVersion;
+            }
+            else
+                ClearEditorGeneratedGrid();
+        }
+
+        private void OnDisable()
+        {
+            if (Application.isPlaying)
+                GameBootstrap.OnBoardChanged -= OnBoardChanged;
         }
 
         private void OnDestroy()
         {
-            GameBootstrap.OnBoardChanged -= OnBoardChanged;
+            if (Application.isPlaying)
+                GameBootstrap.OnBoardChanged -= OnBoardChanged;
+        }
+
+        private void Update()
+        {
+            if (!Application.isPlaying)
+                return;
+
+            TryResolveRuntimeReferences();
+
+            if (_lineClearFx.HasActiveLineClearPreview)
+                UpdateLineClearPreviewAnimation();
+
+            if (_lastVisualSettingsVersion == ProjectColorGrading.SettingsVersion)
+                return;
+
+            _lastVisualSettingsVersion = ProjectColorGrading.SettingsVersion;
+
+            if (_isInitialized)
+                RefreshInspectorDrivenVisuals();
         }
 
         private void OnBoardChanged(BoardState boardState, Int2[] clearedPositions, int linesCleared)
         {
-            _lastBoardState = boardState;
-            if (!_isInitialized)
-            {
-                InitializeGrid(boardState);
-            }
+            ResolveRuntimeReferences();
 
+            if (boardState == null)
+                return;
+
+            _lastBoardState = boardState;
+
+            if (!_isInitialized || _width != boardState.Width || _height != boardState.Height)
+                InitializeGrid(boardState);
+
+            ClearDropPreview();
             UpdateGrid(boardState);
+
+            if (Application.isPlaying && clearedPositions != null && clearedPositions.Length > 0)
+                StartCoroutine(_lineClearFx.PlayLineClear(transform, clearedPositions, CellSize, GetCellTransform, GetEffectSprite, GetSpriteScale));
         }
 
         private void InitializeGrid(BoardState boardState)
         {
+            ResetDelegatedVisuals();
             _width = boardState.Width;
             _height = boardState.Height;
             _cells = new SimpleCell[_width, _height];
-            _linePreviewGlow = new SpriteRenderer[_width, _height];
-            _boardBackdropRenderer = null;
-            _boardBackdropBorderRenderer = null;
 
-            for (int i = transform.childCount - 1; i >= 0; i--)
-            {
-                Destroy(transform.GetChild(i).gameObject);
-            }
+            DestroyGridChildren(Application.isPlaying);
 
             for (int x = 0; x < _width; x++)
             {
                 for (int y = 0; y < _height; y++)
-                {
                     CreateCellAt(x, y);
-                }
             }
 
             EnsureBoardBackdrop();
             _isInitialized = true;
-            Debug.Log($"[SimpleGridView] Grid initialized: {_width}x{_height}");
+        }
+
+        private void DestroyGridChildren(bool isPlaying)
+        {
+            for (int i = transform.childCount - 1; i >= 0; i--)
+            {
+                GameObject child = transform.GetChild(i).gameObject;
+                if (isPlaying)
+                    Destroy(child);
+                else
+                    DestroyImmediate(child);
+            }
         }
 
         private void CreateCellAt(int x, int y)
         {
             var cellObj = new GameObject($"Cell_{x}_{y}");
-            cellObj.transform.SetParent(transform);
+            cellObj.transform.SetParent(transform, false);
             cellObj.transform.position = GetWorldPosition(x, y);
 
             var spriteRenderer = cellObj.AddComponent<SpriteRenderer>();
@@ -161,45 +287,26 @@ namespace BlockPuzzle.UnityAdapter.Grid
             var cell = cellObj.AddComponent<SimpleCell>();
             cell.SetSortingOrder(1);
 
-            var glowObj = new GameObject("LinePreviewGlow");
-            glowObj.transform.SetParent(cellObj.transform, false);
-            glowObj.transform.localPosition = Vector3.zero;
-            glowObj.transform.localScale = Vector3.one * linePreviewGlowScale;
-
-            var glowRenderer = glowObj.AddComponent<SpriteRenderer>();
-            glowRenderer.sortingOrder = 0;
-            glowRenderer.color = linePreviewGlowColor;
-            glowRenderer.enabled = false;
-
-            Sprite emptySprite = spriteConfig?.EmptyCellSprite;
+            Sprite emptySprite = GetResolvedEmptyCellSprite();
             if (emptySprite != null)
             {
                 cell.SetSprite(emptySprite);
-                cell.SetColor(Color.white);
-                glowRenderer.sprite = emptySprite;
-
-                float spriteWorldSize = emptySprite.bounds.size.x;
-                if (spriteWorldSize > 0)
-                {
-                    float scale = cellSize / spriteWorldSize;
-                    cellObj.transform.localScale = new Vector3(scale, scale, 1f);
-                }
-                else
-                {
-                    cellObj.transform.localScale = Vector3.one * cellSize;
-                }
+                cell.SetColor(ResolveEmptyCellColor());
+                float scale = GetSpriteScale(emptySprite, CellSize * emptyCellScale);
+                cellObj.transform.localScale = new Vector3(scale, scale, 1f);
             }
             else
             {
                 Sprite defaultSprite = GetDefaultSquareSprite();
                 cell.SetSprite(defaultSprite);
-                cell.SetColor(emptyCellColor);
-                glowRenderer.sprite = defaultSprite;
-                cellObj.transform.localScale = new Vector3(cellSize, cellSize, 1f);
+                cell.SetColor(ResolveEmptyCellColor());
+                float scale = GetSpriteScale(defaultSprite, CellSize * emptyCellScale);
+                cellObj.transform.localScale = new Vector3(scale, scale, 1f);
             }
 
+            cell.SetBorderStyle(showCellBorders, emptyCellBorderColor, cellBorderThicknessInCells);
+
             _cells[x, y] = cell;
-            _linePreviewGlow[x, y] = glowRenderer;
         }
 
         private Sprite GetDefaultSquareSprite()
@@ -212,8 +319,9 @@ namespace BlockPuzzle.UnityAdapter.Grid
 
         private Sprite CreateDefaultSquareSprite()
         {
-            int size = 32;
+            const int size = 32;
             Texture2D texture = new Texture2D(size, size);
+            texture.hideFlags = HideFlags.HideAndDontSave;
             Color[] colors = new Color[size * size];
 
             for (int i = 0; i < colors.Length; i++)
@@ -222,359 +330,627 @@ namespace BlockPuzzle.UnityAdapter.Grid
             texture.SetPixels(colors);
             texture.Apply();
 
-            return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size);
+            Sprite sprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size);
+            sprite.hideFlags = HideFlags.HideAndDontSave;
+            return sprite;
+        }
+
+        private Sprite GetRoundedSquareSprite(float normalizedRadius)
+        {
+            normalizedRadius = Mathf.Clamp01(normalizedRadius);
+            int cacheKey = Mathf.RoundToInt(normalizedRadius * 1000f);
+            if (_roundedSpriteCache.TryGetValue(cacheKey, out var cachedSprite) && cachedSprite != null)
+                return cachedSprite;
+
+            const int size = 512;
+            Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            texture.hideFlags = HideFlags.HideAndDontSave;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.filterMode = FilterMode.Bilinear;
+
+            float radius = normalizedRadius * size * 0.5f;
+            float innerMin = radius;
+            float innerMax = size - radius - 1f;
+            Color[] pixels = new Color[size * size];
+            const float edgeSoftness = 1.5f;
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float clampedX = Mathf.Clamp(x, innerMin, innerMax);
+                    float clampedY = Mathf.Clamp(y, innerMin, innerMax);
+                    float dx = x - clampedX;
+                    float dy = y - clampedY;
+                    float distance = Mathf.Sqrt(dx * dx + dy * dy);
+                    float alpha = 1f - Mathf.Clamp01((distance - radius + edgeSoftness) / edgeSoftness);
+                    pixels[(y * size) + x] = new Color(1f, 1f, 1f, alpha);
+                }
+            }
+
+            texture.SetPixels(pixels);
+            texture.Apply();
+
+            Sprite sprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size);
+            sprite.hideFlags = HideFlags.HideAndDontSave;
+            _roundedSpriteCache[cacheKey] = sprite;
+            return sprite;
+        }
+
+        private Sprite GetEmptyCellSprite()
+        {
+            if (themeConfig != null && themeConfig.CustomCellSprite != null)
+                return themeConfig.CustomCellSprite;
+
+            if (spriteConfig != null && spriteConfig.EmptyCellSprite != null)
+                return spriteConfig.EmptyCellSprite;
+
+            return null;
+        }
+
+        private Sprite GetResolvedEmptyCellSprite()
+        {
+            if (useRoundedEmptyCellSprite)
+                return GetRoundedSquareSprite(emptyCellCornerRadius);
+
+            if (useFlatEmptyCellFill)
+                return GetDefaultSquareSprite();
+
+            return GetEmptyCellSprite() ?? GetDefaultSquareSprite();
+        }
+
+        private Sprite GetEffectSprite()
+        {
+            if (spriteConfig != null && spriteConfig.EmptyCellSprite != null)
+                return spriteConfig.EmptyCellSprite;
+
+            if (themeConfig != null && themeConfig.CustomCellSprite != null)
+                return themeConfig.CustomCellSprite;
+
+            return GetDefaultSquareSprite();
+        }
+
+        private static float GetSpriteScale(Sprite sprite, float targetWorldSize)
+        {
+            float spriteWorldSize = sprite != null && sprite.bounds.size.x > 0f ? sprite.bounds.size.x : 1f;
+            return targetWorldSize / spriteWorldSize;
         }
 
         private void EnsureBoardBackdrop()
         {
-            if (!_isInitialized && (_width <= 0 || _height <= 0))
-                return;
-
-            if (_width <= 0 || _height <= 0)
-                return;
-
-            if (!showBoardBackdrop)
-            {
-                SetBackdropRendererEnabled(_boardBackdropRenderer, false);
-                SetBackdropRendererEnabled(_boardBackdropBorderRenderer, false);
-                return;
-            }
-
-            float step = cellSize + cellSpacing;
-            float boardWidth = ((_width - 1) * step) + cellSize;
-            float boardHeight = ((_height - 1) * step) + cellSize;
-            float paddingWorld = boardBackdropPaddingInCells * step;
-
-            var backdrop = GetOrCreateBackdropRenderer(
-                ref _boardBackdropRenderer,
-                "BoardBackdrop",
-                boardBackdropSortingOrder);
-
-            backdrop.sprite = GetDefaultSquareSprite();
-            backdrop.color = boardBackdropColor;
-            backdrop.enabled = true;
-            backdrop.transform.localPosition = Vector3.zero;
-            backdrop.transform.localRotation = Quaternion.identity;
-            backdrop.transform.localScale = new Vector3(
-                boardWidth + (paddingWorld * 2f),
-                boardHeight + (paddingWorld * 2f),
-                1f);
-
-            if (!showBoardBackdropBorder || boardBackdropBorderThicknessInCells <= 0f)
-            {
-                SetBackdropRendererEnabled(_boardBackdropBorderRenderer, false);
-                return;
-            }
-
-            float borderThicknessWorld = boardBackdropBorderThicknessInCells * step;
-            var border = GetOrCreateBackdropRenderer(
-                ref _boardBackdropBorderRenderer,
-                "BoardBackdropBorder",
-                boardBackdropSortingOrder - 1);
-
-            border.sprite = GetDefaultSquareSprite();
-            border.color = boardBackdropBorderColor;
-            border.enabled = true;
-            border.transform.localPosition = Vector3.zero;
-            border.transform.localRotation = Quaternion.identity;
-            border.transform.localScale = new Vector3(
-                boardWidth + (paddingWorld * 2f) + (borderThicknessWorld * 2f),
-                boardHeight + (paddingWorld * 2f) + (borderThicknessWorld * 2f),
-                1f);
+            _backdropView.EnsureBoardBackdrop(
+                transform,
+                _width,
+                _height,
+                TotalCellSize,
+                CellSize,
+                ShowBoardBackdrop,
+                ShowBoardBackdropBorder,
+                BoardBackdropPaddingInCells,
+                BoardBackdropBorderThicknessInCells,
+                BoardBackdropSortingOrder,
+                backdropOffset,
+                ApplyUiColor(BoardBackdropColor),
+                ApplyUiColor(BoardBackdropBorderColor),
+                GetBackdropSprite(),
+                GetBackdropBorderSprite());
         }
 
-        private SpriteRenderer GetOrCreateBackdropRenderer(ref SpriteRenderer renderer, string objectName, int sortingOrder)
+        private Sprite GetBackdropSprite()
         {
-            if (renderer == null)
-            {
-                var obj = new GameObject(objectName);
-                obj.transform.SetParent(transform, false);
-                renderer = obj.AddComponent<SpriteRenderer>();
-            }
+            if (useRoundedBackdropSprite)
+                return GetRoundedSquareSprite(boardBackdropCornerRadius);
 
-            renderer.sortingOrder = sortingOrder;
-            return renderer;
+            if (customBackdropSprite != null)
+                return customBackdropSprite;
+
+            if (themeConfig != null && themeConfig.CustomBackdropSprite != null)
+                return themeConfig.CustomBackdropSprite;
+
+            return GetDefaultSquareSprite();
         }
 
-        private static void SetBackdropRendererEnabled(SpriteRenderer renderer, bool enabled)
+        private Sprite GetBackdropBorderSprite()
         {
-            if (renderer != null)
-                renderer.enabled = enabled;
+            if (useRoundedBackdropSprite)
+                return GetRoundedSquareSprite(boardBackdropBorderCornerRadius);
+
+            return GetBackdropSprite();
         }
 
         private void UpdateGrid(BoardState boardState)
         {
+            if (boardState == null || _cells == null)
+                return;
+
             for (int x = 0; x < _width; x++)
             {
                 for (int y = 0; y < _height; y++)
                 {
-                    if (_cells[x, y] == null) continue;
+                    if (_cells[x, y] == null)
+                        continue;
 
-                    bool isFilled = boardState.IsOccupied(x, y);
-                    var cellTransform = _cells[x, y].transform;
+                    Transform cellTransform = _cells[x, y].transform;
+                    cellTransform.position = GetWorldPosition(x, y);
 
-                    if (isFilled)
+                    if (boardState.IsOccupied(x, y))
                     {
                         var cellState = boardState.GetCell(x, y);
-                        Color cellColor = GetBlockColor(cellState.ColorId);
-
-                        Sprite filledSprite = spriteConfig?.GetBlockSpriteByColorId(cellState.ColorId);
-                        if (filledSprite != null)
-                        {
-                            _cells[x, y].SetSprite(filledSprite);
-                            _cells[x, y].SetColor(cellColor);
-                            if (_linePreviewGlow[x, y] != null)
-                                _linePreviewGlow[x, y].sprite = filledSprite;
-
-                            float spriteWorldSize = filledSprite.bounds.size.x;
-                            if (spriteWorldSize > 0)
-                            {
-                                float scale = cellSize / spriteWorldSize;
-                                cellTransform.localScale = new Vector3(scale, scale, 1f);
-                            }
-                        }
-                        else
-                        {
-                            _cells[x, y].SetColor(cellColor);
-                        }
+                        SetCellFilledVisual(x, y, cellState.ColorId, cellTransform);
                     }
                     else
                     {
-                        Sprite emptySprite = spriteConfig?.EmptyCellSprite;
-                        if (emptySprite != null)
-                        {
-                            _cells[x, y].SetSprite(emptySprite);
-                            _cells[x, y].SetColor(Color.white);
-                            if (_linePreviewGlow[x, y] != null)
-                                _linePreviewGlow[x, y].sprite = emptySprite;
-
-                            float spriteWorldSize = emptySprite.bounds.size.x;
-                            if (spriteWorldSize > 0)
-                            {
-                                float scale = cellSize / spriteWorldSize;
-                                cellTransform.localScale = new Vector3(scale, scale, 1f);
-                            }
-                        }
-                        else
-                        {
-                            _cells[x, y].SetColor(emptyCellColor);
-                        }
+                        SetCellEmptyVisual(x, y, cellTransform);
                     }
                 }
             }
+        }
+
+        private void SetCellFilledVisual(int x, int y, int colorId, Transform cellTransform)
+        {
+            Color cellColor = ResolveFilledCellColor(colorId);
+            Sprite filledSprite = GetFilledCellSprite(colorId);
+
+            if (filledSprite != null)
+            {
+                _cells[x, y].SetSprite(filledSprite);
+                _cells[x, y].SetColor(cellColor);
+                float scale = GetSpriteScale(filledSprite, CellSize * filledCellScale);
+                cellTransform.localScale = new Vector3(scale, scale, 1f);
+            }
+            else
+            {
+                _cells[x, y].SetSprite(GetDefaultSquareSprite());
+                _cells[x, y].SetColor(cellColor);
+                float scale = GetSpriteScale(GetDefaultSquareSprite(), CellSize * filledCellScale);
+                cellTransform.localScale = new Vector3(scale, scale, 1f);
+            }
+
+            _cells[x, y].SetBorderStyle(false, filledCellBorderColor, cellBorderThicknessInCells);
+        }
+
+        private void SetCellEmptyVisual(int x, int y, Transform cellTransform)
+        {
+            Sprite emptySprite = GetResolvedEmptyCellSprite();
+            Color resolvedEmptyColor = ResolveEmptyCellColor();
+            if (emptySprite != null)
+            {
+                _cells[x, y].SetSprite(emptySprite);
+                _cells[x, y].SetColor(resolvedEmptyColor);
+                float scale = GetSpriteScale(emptySprite, CellSize * emptyCellScale);
+                cellTransform.localScale = new Vector3(scale, scale, 1f);
+            }
+            else
+            {
+                Sprite defaultSprite = GetDefaultSquareSprite();
+                _cells[x, y].SetSprite(defaultSprite);
+                _cells[x, y].SetColor(resolvedEmptyColor);
+                float scale = GetSpriteScale(defaultSprite, CellSize * emptyCellScale);
+                cellTransform.localScale = new Vector3(scale, scale, 1f);
+            }
+
+            _cells[x, y].SetBorderStyle(showCellBorders, emptyCellBorderColor, cellBorderThicknessInCells);
+        }
+
+        [ContextMenu("Sync With Theme")]
+        public void SyncWithTheme()
+        {
+            if (themeConfig == null)
+                return;
+
+            gridOffset = themeConfig.GridOffset;
+            cellSize = themeConfig.CellSize;
+            cellSpacing = themeConfig.CellSpacing;
+            showBoardBackdrop = themeConfig.ShowBoardBackdrop;
+            customBackdropSprite = themeConfig.CustomBackdropSprite;
+            boardBackdropColor = themeConfig.BoardBackdropColor;
+            boardBackdropPaddingInCells = themeConfig.BoardBackdropPaddingInCells;
+            backdropOffset = themeConfig.BackdropOffset;
+            showBoardBackdropBorder = themeConfig.ShowBoardBackdropBorder;
+            boardBackdropBorderColor = themeConfig.ShowBoardBackdropBorder ? themeConfig.BoardBackdropBorderColor : boardBackdropBorderColor;
+            boardBackdropBorderThicknessInCells = themeConfig.BoardBackdropBorderThicknessInCells;
+            boardBackdropSortingOrder = themeConfig.BoardBackdropSortingOrder;
+
+            if (Application.isPlaying && _lastBoardState != null)
+                OnBoardChanged(_lastBoardState, null, 0);
         }
 
         private void OnValidate()
         {
-            cellSize = Mathf.Clamp(cellSize, 0.3f, 1.0f);
-            cellSpacing = Mathf.Clamp(cellSpacing, 0f, 0.2f);
+            cellSize = Mathf.Max(0.05f, cellSize);
+            cellSpacing = Mathf.Max(0f, cellSpacing);
+            emptyCellCornerRadius = Mathf.Clamp01(emptyCellCornerRadius);
+            filledCellCornerRadius = Mathf.Clamp01(filledCellCornerRadius);
+            boardBackdropCornerRadius = Mathf.Clamp01(boardBackdropCornerRadius);
+            boardBackdropBorderCornerRadius = Mathf.Clamp01(boardBackdropBorderCornerRadius);
+            dropPreviewCornerRadius = Mathf.Clamp01(dropPreviewCornerRadius);
+            boardBackdropPaddingInCells = Mathf.Clamp(boardBackdropPaddingInCells, -2f, 5f);
+            boardBackdropBorderThicknessInCells = Mathf.Clamp01(boardBackdropBorderThicknessInCells);
+            cellBorderThicknessInCells = Mathf.Clamp(cellBorderThicknessInCells, 0f, 0.2f);
+            emptyCellScale = Mathf.Clamp(emptyCellScale, 0.5f, 1.2f);
+            emptyCellAlpha = Mathf.Clamp01(emptyCellAlpha);
+            filledCellScale = Mathf.Clamp(filledCellScale, 0.5f, 1.2f);
             placedBlockBrightness = Mathf.Clamp(placedBlockBrightness, 0.5f, 2.0f);
             placedBlockAlpha = Mathf.Clamp01(placedBlockAlpha);
-            linePreviewBlendFilled = Mathf.Clamp01(linePreviewBlendFilled);
-            linePreviewBlendEmpty = Mathf.Clamp01(linePreviewBlendEmpty);
-            linePreviewValueBoost = Mathf.Clamp01(linePreviewValueBoost);
-            linePreviewGlowScale = Mathf.Clamp(linePreviewGlowScale, 1f, 1.6f);
-            boardBackdropPaddingInCells = Mathf.Clamp(boardBackdropPaddingInCells, 0f, 2f);
-            boardBackdropBorderThicknessInCells = Mathf.Clamp(boardBackdropBorderThicknessInCells, 0f, 1f);
+            dropPreviewAlpha = Mathf.Clamp01(dropPreviewAlpha);
+            dropPreviewScale = Mathf.Clamp(dropPreviewScale, 0.75f, 1.15f);
+            dropPreviewBrightness = Mathf.Clamp(dropPreviewBrightness, 0.8f, 1.5f);
+            _roundedSpriteCache.Clear();
 
-            if (Application.isPlaying && _isInitialized && _lastBoardState != null)
+            if (!Application.isPlaying)
             {
-                UpdateGrid(_lastBoardState);
-                EnsureBoardBackdrop();
-                ApplyPreviewGlow();
+                if (mirrorTrayBlockVisuals && sourceTray == null)
+                    sourceTray = TryAutoAssignSingleton<NewBlockTray>();
+
+                ClearEditorGeneratedGrid();
+                return;
             }
+
+            if (_isInitialized)
+                RefreshInspectorDrivenVisuals();
         }
 
-        private Color GetBlockColor(int colorId)
+        private void ClearEditorGeneratedGrid()
         {
-            if (blockColors == null || blockColors.Length == 0)
-                return ApplyBlockLighting(new Color(1f, 0.4f, 0.8f));
+            if (Application.isPlaying)
+                return;
 
-            int colorIndex = (colorId - 1) % blockColors.Length;
-            return ApplyBlockLighting(blockColors[colorIndex]);
+            if (transform.childCount > 0)
+                DestroyGridChildren(false);
+
+            _cells = null;
+            ResetDelegatedVisuals();
+            _isInitialized = false;
+            _lastBoardState = null;
+            _width = 0;
+            _height = 0;
+        }
+
+        private void RefreshInspectorDrivenVisuals()
+        {
+            if (_cells != null)
+            {
+                for (int x = 0; x < _width; x++)
+                {
+                    for (int y = 0; y < _height; y++)
+                    {
+                        if (_cells[x, y] == null)
+                            continue;
+
+                        Transform cellTransform = _cells[x, y].transform;
+                        cellTransform.position = GetWorldPosition(x, y);
+
+                        var renderer = _cells[x, y].GetComponent<SpriteRenderer>();
+                        Sprite sprite = renderer != null ? renderer.sprite : null;
+                        if (sprite != null)
+                        {
+                            float scale = GetSpriteScale(sprite, CellSize);
+                            cellTransform.localScale = new Vector3(scale, scale, 1f);
+                        }
+                    }
+                }
+            }
+
+                if (_lastBoardState != null)
+                    UpdateGrid(_lastBoardState);
+            else if (_cells != null)
+            {
+                Sprite emptySprite = GetResolvedEmptyCellSprite();
+                for (int x = 0; x < _width; x++)
+                {
+                    for (int y = 0; y < _height; y++)
+                    {
+                        if (_cells[x, y] == null)
+                            continue;
+
+                        _cells[x, y].SetSprite(emptySprite);
+                        _cells[x, y].SetColor(ResolveEmptyCellColor());
+                        float scale = GetSpriteScale(emptySprite, CellSize * emptyCellScale);
+                        _cells[x, y].transform.localScale = new Vector3(scale, scale, 1f);
+                        _cells[x, y].SetBorderStyle(showCellBorders, emptyCellBorderColor, cellBorderThicknessInCells);
+                    }
+                }
+            }
+
+            EnsureBoardBackdrop();
+            ClearDropPreview();
+        }
+
+        public Color GetBlockColor(int colorId)
+        {
+            return ApplyBlockLighting(GetPaletteColor(colorId));
         }
 
         private Color ApplyBlockLighting(Color baseColor)
         {
-            Color lit = baseColor * placedBlockBrightness;
-            lit.r = Mathf.Clamp01(lit.r);
-            lit.g = Mathf.Clamp01(lit.g);
-            lit.b = Mathf.Clamp01(lit.b);
-            lit.a = placedBlockAlpha;
-            return lit;
+            Color result = baseColor;
+            result.a = placedBlockAlpha;
+            return result;
         }
 
-        // ─── LINE HIGHLIGHT ───────────────────────────────────────────
+        private Color ResolveFilledCellColor(int colorId)
+        {
+            if (HasAssignedBlockSprite(colorId))
+            {
+                if (useFilledCellTintOverride)
+                {
+                    Color overrideColor = filledCellTintOverride;
+                    overrideColor.a = placedBlockAlpha;
+                    return overrideColor;
+                }
 
-        /// <summary>
-        /// Belirtilen satır ve sütunlardaki hücreleri parlat (drag önizlemesi).
-        /// </summary>
+                return new Color(1f, 1f, 1f, placedBlockAlpha);
+            }
+
+            Color color = GetBlockColor(colorId);
+            color.a = placedBlockAlpha;
+            return color;
+        }
+
+        private Color ResolveEmptyCellColor()
+        {
+            Color color = EmptyCellColor;
+            color.a *= emptyCellAlpha;
+            return color;
+        }
+
+        public void EnsureBoardBackdropVisible()
+        {
+            if (!_isInitialized || _width <= 0 || _height <= 0)
+                return;
+
+            EnsureBoardBackdrop();
+        }
+
+        public void ApplyResponsiveLayout(float newCellSize, float newCellSpacing, Vector3 centerPosition)
+        {
+            cellSize = Mathf.Max(0.001f, newCellSize);
+            cellSpacing = Mathf.Max(0f, newCellSpacing);
+            transform.position = centerPosition;
+
+            if (_isInitialized)
+            {
+                RefreshInspectorDrivenVisuals();
+            }
+            else if (_cells != null)
+            {
+                for (int x = 0; x < _width; x++)
+                {
+                    for (int y = 0; y < _height; y++)
+                    {
+                        if (_cells[x, y] != null)
+                            _cells[x, y].transform.position = GetWorldPosition(x, y);
+                    }
+                }
+
+                EnsureBoardBackdrop();
+
+                if (_lastBoardState != null)
+                    UpdateGrid(_lastBoardState);
+            }
+
+            ClearPlacementPreview();
+            ClearLineHighlights();
+        }
+
+        public void ShowDropPreview(Int2 anchor, IReadOnlyList<Int2> offsets, Color blockColor, int colorId = -1)
+        {
+            RenderPlacementGhost(anchor, offsets, blockColor, colorId, dropPreviewAlpha, dropPreviewScale, dropPreviewSortingOrder);
+        }
+
+        public void ClearDropPreview()
+        {
+            _previewRenderer.ClearPlacementPreview();
+        }
+
+        private Sprite GetDropPreviewSprite(int colorId)
+        {
+            if (colorId > 0 && spriteConfig != null)
+            {
+                Sprite blockSprite = spriteConfig.GetBlockSpriteByColorId(colorId);
+                if (blockSprite != null)
+                    return blockSprite;
+            }
+
+            return GetDefaultSquareSprite();
+        }
+
+        private Color GetPaletteColor(int colorId)
+        {
+            Color[] palette = mirrorTrayBlockVisuals && sourceTray != null
+                ? sourceTray.GetPreferredPalette()
+                : UISettingsProfile.GetPreferredBlockPalette(blockColors);
+
+            if (palette == null || palette.Length == 0)
+                return new Color(1f, 0.4f, 0.8f);
+
+            int colorIndex = (colorId - 1) % palette.Length;
+            if (colorIndex < 0)
+                colorIndex += palette.Length;
+
+            return palette[colorIndex];
+        }
+
+        private static Color ApplyUiColor(Color color) => color;
+
+        private Sprite GetFilledCellSprite(int colorId)
+        {
+            if (preferAssignedBlockSprites && spriteConfig != null)
+            {
+                Sprite assignedSprite = spriteConfig.GetBlockSpriteByColorId(colorId);
+                if (assignedSprite != null)
+                    return assignedSprite;
+            }
+
+            if (useFlatFilledCellTint)
+            {
+                if (useRoundedFilledCellSprite)
+                    return GetRoundedSquareSprite(filledCellCornerRadius);
+
+                return GetDefaultSquareSprite();
+            }
+
+            if (useRoundedFilledCellSprite)
+                return GetRoundedSquareSprite(filledCellCornerRadius);
+
+            if (spriteConfig != null)
+            {
+                Sprite coloredSprite = spriteConfig.GetBlockSpriteByColorId(colorId);
+                if (coloredSprite != null)
+                    return coloredSprite;
+
+                if (spriteConfig.FilledCellSprite != null)
+                    return spriteConfig.FilledCellSprite;
+            }
+
+            return GetDefaultSquareSprite();
+        }
+
+        private bool HasAssignedBlockSprite(int colorId)
+        {
+            return preferAssignedBlockSprites &&
+                   spriteConfig != null &&
+                   spriteConfig.GetBlockSpriteByColorId(colorId) != null;
+        }
+
+        private void ResolveRuntimeReferences()
+        {
+            if (!mirrorTrayBlockVisuals)
+                return;
+
+            if (sourceTray == null)
+            {
+                sourceTray = FindFirstObjectByType<NewBlockTray>();
+                if (sourceTray != null && !_loggedSourceTrayFallbackWarning)
+                {
+                    _loggedSourceTrayFallbackWarning = true;
+                    GameLogger.LogWarning("[SimpleGridView] sourceTray was resolved via runtime lookup. Inspector wiring is the preferred production path when mirrorTrayBlockVisuals is enabled.");
+                }
+            }
+
+            if (sourceTray == null)
+                return;
+
+            placedBlockAlpha = sourceTray.NormalAlpha;
+        }
+
+        private void TryResolveRuntimeReferences()
+        {
+            if (!mirrorTrayBlockVisuals || sourceTray != null)
+                return;
+
+            if (Time.unscaledTime < _nextRuntimeReferenceResolveTime)
+                return;
+
+            _nextRuntimeReferenceResolveTime = Time.unscaledTime + RuntimeReferenceResolveIntervalSeconds;
+            ResolveRuntimeReferences();
+        }
+
+#if UNITY_EDITOR
+        private static T TryAutoAssignSingleton<T>() where T : Object
+        {
+            T[] instances = FindObjectsByType<T>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            return instances.Length == 1 ? instances[0] : null;
+        }
+#endif
+
+        public void SetPlacementPreview(Int2 anchor, IReadOnlyList<Int2> offsets, bool canPlace, Color blockColor, int colorId = -1)
+        {
+            Color previewColor = canPlace ? blockColor : InvalidPlacementPreviewColor;
+            float alpha = canPlace ? ValidPlacementPreviewAlpha : InvalidPlacementPreviewAlpha;
+            RenderPlacementGhost(anchor, offsets, previewColor, colorId, alpha, PlacementPreviewScale, PlacementPreviewSortingOrder);
+        }
+
+        public void ClearPlacementPreview()
+        {
+            ClearDropPreview();
+        }
+
         public void HighlightLines(List<int> rows, List<int> cols)
         {
-            if (!_isInitialized) return;
-
-            var nextHighlighted = new HashSet<(int x, int y)>();
-
-            for (int i = 0; i < rows.Count; i++)
-            {
-                int row = rows[i];
-                if (row < 0 || row >= _height) continue;
-
-                for (int x = 0; x < _width; x++)
-                    nextHighlighted.Add((x, row));
-            }
-
-            for (int i = 0; i < cols.Count; i++)
-            {
-                int col = cols[i];
-                if (col < 0 || col >= _width) continue;
-
-                for (int y = 0; y < _height; y++)
-                    nextHighlighted.Add((col, y));
-            }
-
-            if (nextHighlighted.Count == 0)
-            {
-                ClearLineHighlights();
-                return;
-            }
-
-            if (_highlightedCells.SetEquals(nextHighlighted))
-            {
-                return;
-            }
-
-            RestoreHighlightedCells();
-            _highlightedCells.Clear();
-
-            foreach (var cell in nextHighlighted)
-                _highlightedCells.Add(cell);
-            
-            ApplyPreviewHighlight();
-            ApplyPreviewGlow();
+            _lineClearFx.HighlightLines(
+                transform,
+                _width,
+                _height,
+                HasRenderableCell,
+                GetWorldPosition,
+                GetLineClearPreviewSprite,
+                GetSpriteScale,
+                CellSize,
+                lineClearPreviewBaseScale,
+                lineClearPreviewMinAlpha,
+                lineClearPreviewColor,
+                lineClearPreviewSortingOrder,
+                rows,
+                cols);
         }
 
-        /// <summary>
-        /// Tüm highlight'ları temizle ve orijinal renklere geri dön.
-        /// </summary>
         public void ClearLineHighlights()
         {
-            RestoreHighlightedCells();
-
-            _highlightedCells.Clear();
+            _lineClearFx.ClearLineHighlights();
         }
 
-        private void RestoreHighlightedCells()
+        private void UpdateLineClearPreviewAnimation()
         {
-            if (!_isInitialized || _lastBoardState == null)
-                return;
-
-            foreach (var (x, y) in _highlightedCells)
-            {
-                RestoreCellColor(x, y);
-                SetCellGlow(x, y, false);
-            }
+            _lineClearFx.UpdateLineClearPreviewAnimation(
+                Time.deltaTime,
+                enableLineClearPreviewPulse,
+                lineClearPreviewPulseSpeed,
+                lineClearPreviewMinAlpha,
+                lineClearPreviewMaxAlpha,
+                lineClearPreviewBaseScale,
+                lineClearPreviewPulseScale,
+                lineClearPreviewColor,
+                CellSize,
+                GetSpriteScale);
         }
 
-        private void ApplyPreviewHighlight()
+        private Sprite GetLineClearPreviewSprite()
         {
-            foreach (var (x, y) in _highlightedCells)
-                ApplyPreviewHighlightToCell(x, y);
+            if (useRoundedFilledCellSprite)
+                return GetRoundedSquareSprite(filledCellCornerRadius);
+
+            return GetDefaultSquareSprite();
         }
 
-        private void ApplyPreviewGlow()
+        private void RenderPlacementGhost(
+            Int2 anchor,
+            IReadOnlyList<Int2> offsets,
+            Color previewColor,
+            int colorId,
+            float alpha,
+            float scaleMultiplier,
+            int sortingOrder)
         {
-            foreach (var (x, y) in _highlightedCells)
-                SetCellGlow(x, y, true);
+            Sprite previewSprite = offsets == null ? null : GetDropPreviewSprite(colorId);
+            previewColor.a = alpha;
+            _previewRenderer.RenderPlacementGhost(
+                transform,
+                _width,
+                _height,
+                anchor,
+                offsets,
+                previewColor,
+                previewSprite,
+                sortingOrder,
+                CellSize * scaleMultiplier,
+                GetWorldPosition,
+                GetSpriteScale);
         }
 
-        private void ApplyPreviewHighlightToCell(int x, int y)
+        private bool HasRenderableCell(int x, int y)
         {
-            if (_cells == null || _lastBoardState == null) return;
-            if (x < 0 || x >= _width || y < 0 || y >= _height) return;
-            if (_cells[x, y] == null) return;
-
-            Color baseColor = GetBaseCellColor(x, y, out bool isFilled);
-            Color tint = isFilled ? linePreviewTintFilled : linePreviewTintEmpty;
-            float blend = isFilled ? linePreviewBlendFilled : linePreviewBlendEmpty;
-
-            Color mixed = Color.Lerp(baseColor, tint, blend);
-            mixed.r = Mathf.Clamp01(mixed.r * (1f + linePreviewValueBoost));
-            mixed.g = Mathf.Clamp01(mixed.g * (1f + linePreviewValueBoost));
-            mixed.b = Mathf.Clamp01(mixed.b * (1f + linePreviewValueBoost));
-            mixed.a = baseColor.a;
-
-            _cells[x, y].SetColor(mixed);
+            return _cells != null &&
+                   x >= 0 && x < _width &&
+                   y >= 0 && y < _height &&
+                   _cells[x, y] != null;
         }
 
-        private void RestoreCellColor(int x, int y)
+        private void ResetDelegatedVisuals()
         {
-            if (_cells == null || _lastBoardState == null) return;
-            if (x < 0 || x >= _width || y < 0 || y >= _height) return;
-            if (_cells[x, y] == null) return;
-
-            bool isFilled = _lastBoardState.IsOccupied(x, y);
-            if (isFilled)
-            {
-                var cellState = _lastBoardState.GetCell(x, y);
-                Color restored = GetBlockColor(cellState.ColorId);
-                _cells[x, y].SetColor(restored);
-                Sprite filledSprite = spriteConfig?.GetBlockSpriteByColorId(cellState.ColorId);
-                if (filledSprite != null) _cells[x, y].SetSprite(filledSprite);
-            }
-            else
-            {
-                Sprite emptySprite = spriteConfig?.EmptyCellSprite;
-                if (emptySprite != null)
-                {
-                    _cells[x, y].SetSprite(emptySprite);
-                    _cells[x, y].SetColor(Color.white);
-                }
-                else
-                {
-                    _cells[x, y].SetColor(emptyCellColor);
-                }
-            }
-        }
-
-        private Color GetBaseCellColor(int x, int y, out bool isFilled)
-        {
-            isFilled = _lastBoardState.IsOccupied(x, y);
-            if (isFilled)
-            {
-                var cellState = _lastBoardState.GetCell(x, y);
-                return GetBlockColor(cellState.ColorId);
-            }
-
-            return spriteConfig?.EmptyCellSprite != null ? Color.white : emptyCellColor;
-        }
-
-        private void SetCellGlow(int x, int y, bool enabled)
-        {
-            if (_linePreviewGlow == null) return;
-            if (x < 0 || x >= _width || y < 0 || y >= _height) return;
-
-            var glow = _linePreviewGlow[x, y];
-            if (glow == null) return;
-
-            if (!enabled || !enableLinePreviewOuterGlow)
-            {
-                glow.enabled = false;
-                return;
-            }
-
-            var baseRenderer = _cells != null ? _cells[x, y]?.GetComponent<SpriteRenderer>() : null;
-            if (baseRenderer != null && baseRenderer.sprite != null)
-                glow.sprite = baseRenderer.sprite;
-
-            bool isFilled = _lastBoardState != null && _lastBoardState.IsOccupied(x, y);
-            Color tint = isFilled ? linePreviewTintFilled : linePreviewTintEmpty;
-            Color glowColor = Color.Lerp(linePreviewGlowColor, tint, 0.35f);
-            glowColor.a = linePreviewGlowColor.a;
-
-            glow.color = glowColor;
-            glow.transform.localScale = Vector3.one * linePreviewGlowScale;
-            glow.enabled = true;
+            _backdropView.Reset();
+            _previewRenderer.Reset();
+            _lineClearFx.Reset();
         }
     }
 }

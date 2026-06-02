@@ -8,18 +8,18 @@ namespace BlockPuzzle.Core.Tests.Rules
     public class ScoringRulesTests
     {
         [Test]
-        public void CalculateScore_OneLine_FirstCombo_ReturnsBaseScore()
+        public void CalculateScore_OneLine_FirstCombo_ReturnsUpdatedDefaultScore()
         {
             var combo = new ComboState();
             combo.IncrementCombo(); // streak = 1, multiplier = 1.0
 
             var result = ScoringRules.CalculateScore(1, combo);
 
-            Assert.AreEqual(10, result.ScoreDelta);
+            Assert.AreEqual(56, result.ScoreDelta);
             Assert.AreEqual(1, result.LinesCleared);
             Assert.AreEqual(1, result.ComboStreak);
-            Assert.AreEqual(1.0f, result.ComboMultiplier);
-            Assert.AreEqual(1.0f, result.LineClearMultiplier);
+            Assert.AreEqual(1.1f, result.ComboMultiplier);
+            Assert.AreEqual(1.6f, result.LineClearMultiplier);
         }
 
         [Test]
@@ -27,26 +27,26 @@ namespace BlockPuzzle.Core.Tests.Rules
         {
             var combo = new ComboState();
             combo.IncrementCombo();
-            combo.IncrementCombo(); // streak = 2, multiplier = 1.1
+            combo.IncrementCombo(); // streak = 2
 
             var result = ScoringRules.CalculateScore(2, combo);
 
-            // base=20, line-multiplier=1.5, combo=1.1 => 33
-            Assert.AreEqual(33, result.ScoreDelta);
+            // base=64, line-multiplier=2.6, combo=1.55 => 257.92 => 258 (Nearest)
+            Assert.AreEqual(258, result.ScoreDelta);
             Assert.AreEqual(2, result.LinesCleared);
             Assert.AreEqual(2, result.ComboStreak);
-            Assert.AreEqual(1.1f, result.ComboMultiplier);
-            Assert.AreEqual(1.5f, result.LineClearMultiplier);
+            Assert.AreEqual(1.55f, result.ComboMultiplier);
+            Assert.AreEqual(2.6f, result.LineClearMultiplier);
         }
 
         [Test]
-        public void CalculateScore_ZeroLines_ReturnsEmpty()
+        public void CalculateScore_ZeroLines_ReturnsPlacementScore()
         {
             var combo = new ComboState();
 
             var result = ScoringRules.CalculateScore(0, combo);
 
-            Assert.AreEqual(0, result.ScoreDelta);
+            Assert.AreEqual(11, result.ScoreDelta);
             Assert.AreEqual(0, result.LinesCleared);
             Assert.AreEqual(0, result.ComboStreak);
         }

@@ -8,7 +8,7 @@ namespace BlockPuzzle.Core.Tests.Rules
     public class ComboStateTests
     {
         [Test]
-        public void UpdateCombo_WithNoLines_ResetsCombo()
+        public void UpdateCombo_WithNoLines_ConsumesGraceBeforeResetting()
         {
             var combo = new ComboState();
             combo.IncrementCombo();
@@ -16,8 +16,9 @@ namespace BlockPuzzle.Core.Tests.Rules
 
             combo.UpdateCombo(0);
 
-            Assert.AreEqual(0, combo.Streak);
-            Assert.AreEqual(1.0f, combo.Multiplier);
+            Assert.AreEqual(2, combo.Streak);
+            Assert.AreEqual(1.3f, combo.Multiplier);
+            Assert.AreEqual(0, combo.GraceMovesRemaining);
         }
 
         [Test]
@@ -29,7 +30,23 @@ namespace BlockPuzzle.Core.Tests.Rules
             combo.UpdateCombo(2);
 
             Assert.AreEqual(2, combo.Streak);
-            Assert.AreEqual(1.1f, combo.Multiplier);
+            Assert.AreEqual(1.3f, combo.Multiplier);
+            Assert.AreEqual(1, combo.GraceMovesRemaining);
+        }
+
+        [Test]
+        public void ConsumeNonClearMove_AfterGraceIsSpent_ResetsCombo()
+        {
+            var combo = new ComboState();
+            combo.IncrementCombo();
+            combo.IncrementCombo();
+
+            combo.ConsumeNonClearMove();
+            combo.ConsumeNonClearMove();
+
+            Assert.AreEqual(0, combo.Streak);
+            Assert.AreEqual(1.0f, combo.Multiplier);
+            Assert.AreEqual(0, combo.GraceMovesRemaining);
         }
 
         [Test]
@@ -43,6 +60,7 @@ namespace BlockPuzzle.Core.Tests.Rules
 
             Assert.AreEqual(0, combo.Streak);
             Assert.AreEqual(1.0f, combo.Multiplier);
+            Assert.AreEqual(0, combo.GraceMovesRemaining);
         }
 
         [Test]
@@ -54,6 +72,7 @@ namespace BlockPuzzle.Core.Tests.Rules
 
             Assert.AreEqual(0, combo.Streak);
             Assert.AreEqual(1.0f, combo.Multiplier);
+            Assert.AreEqual(0, combo.GraceMovesRemaining);
         }
     }
 }

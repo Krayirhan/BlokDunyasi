@@ -5,6 +5,7 @@ using BlockPuzzle.UnityAdapter.Boot;
 using BlockPuzzle.UnityAdapter.Grid;
 using BlockPuzzle.UnityAdapter.Blocks;
 using BlockPuzzle.UnityAdapter.Input;
+using Debug = BlockPuzzle.Core.Common.GameLogger;
 
 namespace BlokDunyasiTools
 {
@@ -46,15 +47,6 @@ namespace BlokDunyasiTools
                 Debug.Log("[Setup] BlockTray eklendi");
             }
 
-            // 2. NewPreviewSystem
-            var preview = Object.FindFirstObjectByType<NewPreviewSystem>();
-            if (preview == null)
-            {
-                var previewObj = new GameObject("PreviewSystem");
-                previewObj.transform.SetParent(rootObj.transform);
-                preview = previewObj.AddComponent<NewPreviewSystem>();
-                Debug.Log("[Setup] PreviewSystem eklendi");
-            }
 
             // 3. NewDragSystem
             var drag = Object.FindFirstObjectByType<NewDragSystem>();
@@ -83,13 +75,11 @@ namespace BlokDunyasiTools
             var gridView = Object.FindFirstObjectByType<SimpleGridView>();
             var drag = Object.FindFirstObjectByType<NewDragSystem>();
             var tray = Object.FindFirstObjectByType<NewBlockTray>();
-            var preview = Object.FindFirstObjectByType<NewPreviewSystem>();
 
             Debug.Log($"GameBootstrap: {(bootstrap != null ? "VAR" : "YOK")}");
             Debug.Log($"SimpleGridView: {(gridView != null ? "VAR" : "YOK")}");
             Debug.Log($"NewDragSystem: {(drag != null ? (drag.enabled ? "AKTIF" : "DEVRE DISI") : "YOK")}");
             Debug.Log($"NewBlockTray: {(tray != null ? (tray.enabled ? "AKTIF" : "DEVRE DISI") : "YOK")}");
-            Debug.Log($"NewPreviewSystem: {(preview != null ? (preview.enabled ? "AKTIF" : "DEVRE DISI") : "YOK")}");
 
             Debug.Log("=== RAPOR SONU ===");
         }

@@ -13,6 +13,13 @@ namespace BlockPuzzle.Core.Tests.Rules
             var config = new ScoreConfig(
                 formulaVersion: 2,
                 basePointsPerLine: 10,
+                basePointsPerPlacement: 0,
+                basePointsPerPlacedCell: 0,
+                highRiskPlacementBonus: 0,
+                multiLineFinisherBonus: 0,
+                highComboClearBonus: 0,
+                placementComboStepMultiplier: 0f,
+                placementComboMaxMultiplier: 1f,
                 roundingMode: ScoreRoundingMode.Nearest,
                 lineMultiplierCurve: new[]
                 {
@@ -39,6 +46,13 @@ namespace BlockPuzzle.Core.Tests.Rules
             var config = new ScoreConfig(
                 formulaVersion: 5,
                 basePointsPerLine: 20,
+                basePointsPerPlacement: 0,
+                basePointsPerPlacedCell: 0,
+                highRiskPlacementBonus: 0,
+                multiLineFinisherBonus: 0,
+                highComboClearBonus: 0,
+                placementComboStepMultiplier: 0f,
+                placementComboMaxMultiplier: 1f,
                 roundingMode: ScoreRoundingMode.Floor,
                 lineMultiplierCurve: new[]
                 {

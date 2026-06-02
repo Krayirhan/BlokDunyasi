@@ -52,7 +52,108 @@ namespace BlockPuzzle.UnityAdapter
 
         public void Save()
         {
+            DeferredPlayerPrefsSaver.MarkDirty();
+        }
+    }
+
+    internal static class DeferredPlayerPrefsSaver
+    {
+        private static bool _isDirty;
+        private static float _nextFlushTime;
+        private const float FlushDelaySeconds = 1.5f;
+
+        public static void MarkDirty()
+        {
+            _isDirty = true;
+            _nextFlushTime = Time.realtimeSinceStartup + FlushDelaySeconds;
+            DeferredPlayerPrefsSaverBehaviour.EnsureExists();
+        }
+
+        public static void Tick()
+        {
+            if (!_isDirty || Time.realtimeSinceStartup < _nextFlushTime)
+                return;
+
+            FlushNow();
+        }
+
+        public static void FlushNow()
+        {
+            if (!_isDirty)
+                return;
+
             PlayerPrefs.Save();
+            _isDirty = false;
+        }
+    }
+
+    internal sealed class DeferredPlayerPrefsSaverBehaviour : MonoBehaviour
+    {
+        private static DeferredPlayerPrefsSaverBehaviour _instance;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void ResetStatics()
+        {
+            _instance = null;
+        }
+
+        public static void EnsureExists()
+        {
+            if (_instance != null)
+                return;
+
+            _instance = FindFirstObjectByType<DeferredPlayerPrefsSaverBehaviour>(FindObjectsInactive.Include);
+            if (_instance != null)
+                return;
+
+            var go = new GameObject("DeferredPlayerPrefsSaver");
+            DontDestroyOnLoad(go);
+            _instance = go.AddComponent<DeferredPlayerPrefsSaverBehaviour>();
+        }
+
+        private void Awake()
+        {
+            var allSavers = FindObjectsByType<DeferredPlayerPrefsSaverBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < allSavers.Length; i++)
+            {
+                var candidate = allSavers[i];
+                if (candidate != null && candidate != this)
+                {
+                    _instance = this;
+                    Destroy(candidate.gameObject);
+                }
+            }
+
+            if (_instance != null && _instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+
+            _instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
+
+        private void Update()
+        {
+            DeferredPlayerPrefsSaver.Tick();
+        }
+
+        private void OnApplicationPause(bool pauseStatus)
+        {
+            if (pauseStatus)
+                DeferredPlayerPrefsSaver.FlushNow();
+        }
+
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            if (!hasFocus)
+                DeferredPlayerPrefsSaver.FlushNow();
+        }
+
+        private void OnApplicationQuit()
+        {
+            DeferredPlayerPrefsSaver.FlushNow();
         }
     }
 
@@ -118,6 +219,8 @@ namespace BlockPuzzle.UnityAdapter
         public bool VibrationEnabled;
         public bool ShowPlacementHints;
         public bool ShowValidPlacements;
+        public bool ShowPlacementPreview;
+        public bool ShowLineClearPreview;
         public bool AutoDarkMode;
         public bool DarkMode;
         public float AnimationSpeed;
@@ -142,6 +245,8 @@ namespace BlockPuzzle.UnityAdapter
                 VibrationEnabled = settings.VibrationEnabled,
                 ShowPlacementHints = settings.ShowPlacementHints,
                 ShowValidPlacements = settings.ShowValidPlacements,
+                ShowPlacementPreview = settings.ShowPlacementPreview,
+                ShowLineClearPreview = settings.ShowLineClearPreview,
                 AutoDarkMode = settings.AutoDarkMode,
                 DarkMode = settings.DarkMode,
                 AnimationSpeed = settings.AnimationSpeed,
@@ -168,6 +273,8 @@ namespace BlockPuzzle.UnityAdapter
                 VibrationEnabled = VibrationEnabled,
                 ShowPlacementHints = ShowPlacementHints,
                 ShowValidPlacements = ShowValidPlacements,
+                ShowPlacementPreview = ShowPlacementPreview,
+                ShowLineClearPreview = ShowLineClearPreview,
                 AutoDarkMode = AutoDarkMode,
                 DarkMode = DarkMode,
                 AnimationSpeed = AnimationSpeed,
@@ -194,6 +301,7 @@ namespace BlockPuzzle.UnityAdapter
         public int BoardHeight;
         public int Score;
         public int ComboStreak;
+        public int ComboGraceMovesRemaining;
         public int ScoreFormulaVersion;
         public int[] ActiveBlockIds;
         public int[] ActiveBlockSlots;
@@ -228,6 +336,7 @@ namespace BlockPuzzle.UnityAdapter
                 BoardHeight = data.BoardHeight,
                 Score = data.Score,
                 ComboStreak = data.ComboStreak,
+                ComboGraceMovesRemaining = data.ComboGraceMovesRemaining,
                 ScoreFormulaVersion = data.ScoreFormulaVersion,
                 ActiveBlockIds = ShapeIdsToInts(data.ActiveBlocks),
                 ActiveBlockSlots = data.ActiveBlockSlots,
@@ -253,6 +362,7 @@ namespace BlockPuzzle.UnityAdapter
                 BoardHeight = BoardHeight,
                 Score = Score,
                 ComboStreak = ComboStreak,
+                ComboGraceMovesRemaining = ComboGraceMovesRemaining,
                 ScoreFormulaVersion = ScoreFormulaVersion,
                 ActiveBlocks = IntsToShapeIds(ActiveBlockIds),
                 ActiveBlockSlots = ActiveBlockSlots,
@@ -368,6 +478,11 @@ namespace BlockPuzzle.UnityAdapter
         public long LastPlayDateBinary;
         public long TotalScore;
         public int PerfectGames;
+        public int DailyMissionCompletions;
+        public int WeeklyMissionCompletions;
+        public int CurrentDailyMissionProgress;
+        public int CurrentWeeklyMissionProgress;
+        public List<int> WeeklyTopScores;
 
         public static GameStatisticsDto FromGameStatistics(GameStatistics stats)
         {
@@ -390,7 +505,12 @@ namespace BlockPuzzle.UnityAdapter
                 ConsecutiveDaysStreak = stats.ConsecutiveDaysStreak,
                 LastPlayDateBinary = stats.LastPlayDate.ToBinary(),
                 TotalScore = stats.TotalScore,
-                PerfectGames = stats.PerfectGames
+                PerfectGames = stats.PerfectGames,
+                DailyMissionCompletions = stats.DailyMissionCompletions,
+                WeeklyMissionCompletions = stats.WeeklyMissionCompletions,
+                CurrentDailyMissionProgress = stats.CurrentDailyMissionProgress,
+                CurrentWeeklyMissionProgress = stats.CurrentWeeklyMissionProgress,
+                WeeklyTopScores = stats.WeeklyTopScores != null ? new List<int>(stats.WeeklyTopScores) : new List<int>()
             };
 
             if (stats.DailyChallengeCompletions != null)
@@ -422,7 +542,11 @@ namespace BlockPuzzle.UnityAdapter
                 MostLinesClearedAtOnce = MostLinesClearedAtOnce,
                 ConsecutiveDaysStreak = ConsecutiveDaysStreak,
                 TotalScore = TotalScore,
-                PerfectGames = PerfectGames
+                PerfectGames = PerfectGames,
+                DailyMissionCompletions = DailyMissionCompletions,
+                WeeklyMissionCompletions = WeeklyMissionCompletions,
+                CurrentDailyMissionProgress = CurrentDailyMissionProgress,
+                CurrentWeeklyMissionProgress = CurrentWeeklyMissionProgress
             };
 
             stats.TotalPlayTime = new TimeSpan(TotalPlayTimeTicks);
@@ -434,6 +558,9 @@ namespace BlockPuzzle.UnityAdapter
 
             if (TopScores != null)
                 stats.TopScores = new List<int>(TopScores);
+
+            if (WeeklyTopScores != null)
+                stats.WeeklyTopScores = new List<int>(WeeklyTopScores);
 
             if (UnlockedAchievements != null)
                 stats.UnlockedAchievements = new HashSet<string>(UnlockedAchievements);

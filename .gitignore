@@ -7,10 +7,23 @@
 [Ll]ogs/
 UserSettings/
 MemoryCaptures/
+Recordings/
 
-BlokDunyası_BurstDebugInformation_DoNotShip/
-Blok Dünyası_BackUpThisFolder_ButDontShipItWithYourGame/
+# Unity generated backup and debug output
+*_BurstDebugInformation_DoNotShip/
+*_BackUpThisFolder_ButDontShipItWithYourGame/
+.utmp/
 
+# IDE and local tooling
+.vs/
+.vsconfig
+.idea/
+.vscode/
+.venv/
+__pycache__/
+*.pyc
+
+# .NET and C# generated outputs
 *.csproj
 !Assets/Scripts/Core/BlockPuzzle.Core.csproj
 *.sln
@@ -19,10 +32,30 @@ Blok Dünyası_BackUpThisFolder_ButDontShipItWithYourGame/
 *.user
 *.userprefs
 *.suo
+*.cache
 
-# Build artifacts
+# Test results and coverage
+**/TestResults/
+**/coverage/
+coverage/
+*.trx
+*.coverage
+*.coveragexml
+
+# Build and local release outputs
 *.apk
 *.aab
-**/TestResults/
+*.log
+*.binlog
+user.keystore
+analytics_build.binlog
 
+# Firebase unitypackage installer files (already imported, not needed in git)
+*.unitypackage
+
+# Firebase x86_64 desktop native plugins (mobile project, not needed)
+Assets/Firebase/Plugins/x86_64/
+
+# OS junk
 .DS_Store
+Thumbs.db

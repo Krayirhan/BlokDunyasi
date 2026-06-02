@@ -6,17 +6,10 @@ namespace BlockPuzzle.Core.Rules
     /// <summary>
     /// Defines the scoring rules for the Blok Dünyası game.
     /// 
-    /// Scoring Formula:
-    /// - Base: 10 points per cleared line
-    /// - Line Clear Multiplier: 1 + (simultaneous_lines - 1) * 0.5
-    /// - Combo Multiplier: Applied from ComboState
-    /// - Final Score = Base * LineClearMultiplier * ComboMultiplier
-    /// 
-    /// Examples:
-    /// - 1 line: 10 * 1.0 = 10 points
-    /// - 2 lines: 20 * 1.5 = 30 points  
-    /// - 3 lines: 30 * 2.0 = 60 points
-    /// - Plus combo multipliers on top
+    /// Scoring behavior is fully config-driven via <see cref="ScoreConfig"/>:
+    /// - Line clear score uses base points per line with line + combo multipliers.
+    /// - Legal no-clear placements can still award placement points.
+    /// - Rounding mode and formula version are also taken from config.
     /// </summary>
     public static class ScoringRules
     {
@@ -68,18 +61,98 @@ namespace BlockPuzzle.Core.Rules
             // No lines cleared = no score
             if (linesCleared == 0)
             {
-                return ScoreResult.Empty;
+                return CalculatePlacementScore(comboState, scoreConfig);
             }
             
             // Calculate base score with saturation for defensive safety.
             long baseScoreLong = (long)linesCleared * scoreConfig.BasePointsPerLine;
+            if (linesCleared >= 3)
+                baseScoreLong += scoreConfig.MultiLineFinisherBonus;
+            if (comboState.Streak >= 6)
+                baseScoreLong += scoreConfig.HighComboClearBonus;
             int baseScore = baseScoreLong > int.MaxValue ? int.MaxValue : (int)baseScoreLong;
             
             // Line clear multiplier for simultaneous clears
             float lineClearMultiplier = scoreConfig.EvaluateLineMultiplier(linesCleared);
             float comboMultiplier = scoreConfig.EvaluateComboMultiplier(comboState.Streak);
             
-            // Apply multipliers
+            int finalScore = CalculateFinalScore(baseScore, lineClearMultiplier, comboMultiplier, scoreConfig);
+            
+            return new ScoreResult(
+                scoreDelta: finalScore,
+                linesCleared: linesCleared,
+                comboStreak: comboState.Streak,
+                comboMultiplier: comboMultiplier,
+                baseScore: baseScore,
+                lineClearMultiplier: lineClearMultiplier,
+                formulaVersion: scoreConfig.FormulaVersion
+            );
+        }
+
+        /// <summary>
+        /// Calculates score for a legal placement that does not clear lines.
+        /// Keeps score flow active to avoid dead turns while preserving combo reset behavior.
+        /// </summary>
+        public static ScoreResult CalculatePlacementScore(ComboState comboState)
+        {
+            return CalculatePlacementScore(comboState, placedCellCount: 1, _defaultConfig);
+        }
+
+        /// <summary>
+        /// Calculates score for a legal placement that does not clear lines using a specific config.
+        /// </summary>
+        public static ScoreResult CalculatePlacementScore(ComboState comboState, ScoreConfig scoreConfig)
+        {
+            return CalculatePlacementScore(comboState, placedCellCount: 1, scoreConfig);
+        }
+
+        /// <summary>
+        /// Calculates score for a legal placement that does not clear lines using a specific config and placed cell count.
+        /// </summary>
+        public static ScoreResult CalculatePlacementScore(ComboState comboState, int placedCellCount, ScoreConfig scoreConfig)
+        {
+            if (comboState == null)
+                throw new ArgumentNullException(nameof(comboState));
+            if (scoreConfig == null)
+                throw new ArgumentNullException(nameof(scoreConfig));
+
+            int safePlacedCellCount = placedCellCount <= 0 ? 1 : placedCellCount;
+            bool isHighRiskPlacement = comboState.Streak >= 2;
+            long riskBonus = isHighRiskPlacement ? scoreConfig.HighRiskPlacementBonus : 0L;
+            long placementBaseLong = scoreConfig.BasePointsPerPlacement +
+                                     ((long)scoreConfig.BasePointsPerPlacedCell * safePlacedCellCount) +
+                                     riskBonus;
+            int baseScore = placementBaseLong >= int.MaxValue ? int.MaxValue : (int)placementBaseLong;
+
+            if (baseScore <= 0)
+            {
+                return new ScoreResult(
+                    scoreDelta: 0,
+                    linesCleared: 0,
+                    comboStreak: comboState.Streak,
+                    comboMultiplier: scoreConfig.EvaluateComboMultiplier(comboState.Streak),
+                    baseScore: 0,
+                    lineClearMultiplier: 1.0f,
+                    formulaVersion: scoreConfig.FormulaVersion);
+            }
+
+            float placementComboMultiplier = 1.0f + (comboState.Streak * scoreConfig.PlacementComboStepMultiplier);
+            if (placementComboMultiplier > scoreConfig.PlacementComboMaxMultiplier)
+                placementComboMultiplier = scoreConfig.PlacementComboMaxMultiplier;
+
+            int finalScore = CalculateFinalScore(baseScore, lineClearMultiplier: 1.0f, comboMultiplier: placementComboMultiplier, scoreConfig);
+            return new ScoreResult(
+                scoreDelta: finalScore,
+                linesCleared: 0,
+                comboStreak: comboState.Streak,
+                comboMultiplier: placementComboMultiplier,
+                baseScore: baseScore,
+                lineClearMultiplier: 1.0f,
+                formulaVersion: scoreConfig.FormulaVersion);
+        }
+
+        private static int CalculateFinalScore(int baseScore, float lineClearMultiplier, float comboMultiplier, ScoreConfig scoreConfig)
+        {
             float totalMultiplier = lineClearMultiplier * comboMultiplier;
             if (totalMultiplier < 0f || float.IsNaN(totalMultiplier) || float.IsInfinity(totalMultiplier))
                 throw new InvalidOperationException("Calculated score multiplier is invalid.");
@@ -92,19 +165,11 @@ namespace BlockPuzzle.Core.Rules
                 ScoreRoundingMode.Truncate => (long)Math.Truncate(rawScore),
                 _ => (long)Math.Round(rawScore)
             };
-            int finalScore = roundedScore <= 0L
-                ? 0
-                : roundedScore >= int.MaxValue ? int.MaxValue : (int)roundedScore;
-            
-            return new ScoreResult(
-                scoreDelta: finalScore,
-                linesCleared: linesCleared,
-                comboStreak: comboState.Streak,
-                comboMultiplier: comboMultiplier,
-                baseScore: baseScore,
-                lineClearMultiplier: lineClearMultiplier,
-                formulaVersion: scoreConfig.FormulaVersion
-            );
+
+            if (roundedScore <= 0L)
+                return 0;
+
+            return roundedScore >= int.MaxValue ? int.MaxValue : (int)roundedScore;
         }
     }
 }

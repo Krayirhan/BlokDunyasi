@@ -1,7 +1,9 @@
 using System;
+using System.Threading.Tasks;
 using BlockPuzzle.Core.Engine;
 using BlockPuzzle.Core.Persistence;
 using UnityEngine;
+using Debug = BlockPuzzle.Core.Common.GameLogger;
 
 namespace BlockPuzzle.UnityAdapter.Boot
 {
@@ -16,7 +18,7 @@ namespace BlockPuzzle.UnityAdapter.Boot
             _saveKey = saveKey;
         }
 
-        public bool TryLoadSavedGame(Func<GameData, bool> applyLoadedGameData)
+        public async Task<bool> TryLoadSavedGameAsync(Func<GameData, bool> applyLoadedGameData)
         {
             if (_gameStatePersistence == null || applyLoadedGameData == null)
                 return false;
@@ -24,7 +26,7 @@ namespace BlockPuzzle.UnityAdapter.Boot
             GameData data;
             try
             {
-                data = _gameStatePersistence.LoadGameDataAsync(_saveKey).GetAwaiter().GetResult();
+                data = await _gameStatePersistence.LoadGameDataAsync(_saveKey);
             }
             catch (Exception ex)
             {
@@ -37,20 +39,20 @@ namespace BlockPuzzle.UnityAdapter.Boot
 
             if (data.IsGameOver)
             {
-                ClearSavedGame();
+                await ClearSavedGameAsync();
                 return false;
             }
 
             if (!applyLoadedGameData(data))
             {
-                ClearSavedGame();
+                await ClearSavedGameAsync();
                 return false;
             }
 
             return true;
         }
 
-        public void SaveGameIfNeeded(GameEngine gameEngine, GameState currentGameState, int currentSeed, int scoreFormulaVersion)
+        public async Task SaveGameIfNeededAsync(GameEngine gameEngine, GameState currentGameState, int currentSeed, int scoreFormulaVersion)
         {
             if (_gameStatePersistence == null || gameEngine == null || currentGameState == null)
                 return;
@@ -62,7 +64,7 @@ namespace BlockPuzzle.UnityAdapter.Boot
             {
                 var stats = gameEngine.BlockSpawner.GetStats();
                 var data = GameData.FromGameState(currentGameState, stats, currentSeed, scoreFormulaVersion);
-                _gameStatePersistence.SaveGameDataAsync(_saveKey, data).GetAwaiter().GetResult();
+                await _gameStatePersistence.SaveGameDataAsync(_saveKey, data);
             }
             catch (Exception ex)
             {
@@ -70,14 +72,14 @@ namespace BlockPuzzle.UnityAdapter.Boot
             }
         }
 
-        public void ClearSavedGame()
+        public async Task ClearSavedGameAsync()
         {
             if (_gameStatePersistence == null)
                 return;
 
             try
             {
-                _gameStatePersistence.DeleteGameDataAsync(_saveKey).GetAwaiter().GetResult();
+                await _gameStatePersistence.DeleteGameDataAsync(_saveKey);
             }
             catch (Exception ex)
             {

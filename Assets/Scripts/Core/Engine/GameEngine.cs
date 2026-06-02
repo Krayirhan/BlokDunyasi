@@ -1,5 +1,6 @@
 // File: Core/Engine/GameEngine.cs
 using System;
+using System.Collections.Generic;
 using BlockPuzzle.Core.Board;
 using BlockPuzzle.Core.Common;
 using BlockPuzzle.Core.Game;
@@ -20,7 +21,9 @@ namespace BlockPuzzle.Core.Engine
         private readonly ScoreConfig _scoreConfig;
         
         /// <summary>
-        /// Current game state.
+        /// Current live game state.
+        /// Mutable child objects inside this state may change during gameplay.
+        /// Use <see cref="GetStateSnapshot"/> when the caller needs isolation.
         /// </summary>
         public GameState CurrentState { get; private set; }
         
@@ -99,11 +102,19 @@ namespace BlockPuzzle.Core.Engine
             if (loadedState == null)
                 throw new ArgumentNullException(nameof(loadedState));
 
-            CurrentState = loadedState;
+            CurrentState = loadedState.CreateSnapshot();
             OnStateChanged();
 
             if (CurrentState.IsGameOver)
                 OnGameOver();
+        }
+
+        /// <summary>
+        /// Returns a deep snapshot of the current state that is safe from later engine mutations.
+        /// </summary>
+        public GameState GetStateSnapshot()
+        {
+            return CurrentState.CreateSnapshot();
         }
         
         /// <summary>
@@ -141,7 +152,7 @@ namespace BlockPuzzle.Core.Engine
             // Check if new blocks were spawned (all blocks were placed)
             bool triggersSpawn = CurrentState.ActiveBlocks.IsFull; // If full, new blocks were just spawned
             
-            return MoveResult.CreateSuccess(CurrentState.Score, executionResult.ScoreResult, triggersSpawn);
+            return MoveResult.CreateSuccess(CurrentState.Score, executionResult.ScoreResult, triggersSpawn, executionResult.ClearedPositions);
         }
         
         /// <summary>
@@ -223,7 +234,7 @@ namespace BlockPuzzle.Core.Engine
                 shape.Offsets,
                 blockId,
                 colorId,
-                out _);
+                out int previewPlacedCount);
 
             if (placement != PlacementResult.Success)
                 return ScoreResult.Empty;
@@ -231,7 +242,10 @@ namespace BlockPuzzle.Core.Engine
             var lineResult = LineDetector.DetectFullLines(previewBoard);
             int totalLinesCleared = lineResult.FullRowCount + lineResult.FullColumnCount;
             if (totalLinesCleared <= 0)
-                return ScoreResult.Empty;
+            {
+                var previewComboAfterSetupMove = CurrentState.ComboState.Clone().ConsumeNonClearMove();
+                return ScoringRules.CalculatePlacementScore(previewComboAfterSetupMove, previewPlacedCount, _scoreConfig);
+            }
 
             var previewCombo = CurrentState.ComboState.Clone().IncrementCombo();
             return ScoringRules.CalculateScore(totalLinesCleared, previewCombo, _scoreConfig);
@@ -244,6 +258,259 @@ namespace BlockPuzzle.Core.Engine
         {
             CurrentState = CurrentState.WithGameOver();
             OnGameOver();
+        }
+
+        /// <summary>
+        /// Attempts to continue a finished run by restoring gameplay from the same board
+        /// with a fresh active block set.
+        /// </summary>
+        /// <returns>True when continuation is successful; otherwise false.</returns>
+        public bool TryContinueAfterGameOver()
+        {
+            bool hasNoMoves = !CurrentState.ActiveBlocks.IsEmpty &&
+                              !CurrentState.ActiveBlocks.HasPlaceableBlocks(CurrentState.Board);
+
+            if (!CurrentState.IsGameOver && !hasNoMoves)
+            {
+                System.Diagnostics.Debug.WriteLine("[GameEngine.TryContinueAfterGameOver] Aborted: state is not game over and has at least one move.");
+                return false;
+            }
+
+            // Continue should always reopen gameplay with the easiest guaranteed move set,
+            // not another potentially awkward RNG roll.
+            ActiveBlocks selectedBlocks = CreateGuaranteedContinueBlocks();
+
+            if (selectedBlocks == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[GameEngine.TryContinueAfterGameOver] Failed: could not build any continue set.");
+                return false;
+            }
+
+            CurrentState = CurrentState
+                .WithGameOverState(false)
+                .WithActiveBlocks(selectedBlocks);
+
+            var slotIds = selectedBlocks.GetSlotIds();
+            System.Diagnostics.Debug.WriteLine(
+                $"[GameEngine.TryContinueAfterGameOver] Success. Slots: [{slotIds[0]}, {slotIds[1]}, {slotIds[2]}], IsGameOver={CurrentState.IsGameOver}");
+
+            OnStateChanged();
+            return true;
+        }
+
+        private ActiveBlocks CreateGuaranteedContinueBlocks()
+        {
+            if (CurrentState?.Board == null)
+                return null;
+
+            var candidates = GetContinueCandidates(CurrentState.Board);
+            if (candidates.Count == 0)
+                return null;
+
+            var continueBlocks = new ActiveBlocks();
+            continueBlocks.SetBlocks(BuildDiverseContinueSlots(candidates));
+            return continueBlocks;
+        }
+
+        private static List<ContinueCandidate> GetContinueCandidates(BoardState boardState)
+        {
+            var candidates = new List<ContinueCandidate>(ShapeLibrary.Count);
+            var allShapeIds = ShapeLibrary.GetAllShapeIds();
+
+            for (int i = 0; i < allShapeIds.Length; i++)
+            {
+                if (!ShapeLibrary.TryGetShape(allShapeIds[i], out var shape) || shape?.Offsets == null)
+                    continue;
+
+                Int2[] validPlacements = PlacementSearch.FindValidPlacements(boardState, shape);
+                if (validPlacements.Length == 0)
+                    continue;
+
+                candidates.Add(new ContinueCandidate(
+                    allShapeIds[i],
+                    GetShapeFamilyKey(shape),
+                    shape.Offsets.Length,
+                    validPlacements.Length,
+                    GetShapeBoundingArea(shape)));
+            }
+
+            candidates.Sort(CompareContinueCandidates);
+            return candidates;
+        }
+
+        private static ShapeId[] BuildDiverseContinueSlots(List<ContinueCandidate> candidates)
+        {
+            var slots = new ShapeId[3];
+            int nextSlot = 0;
+
+            // Prefer different families first, then different exact shapes, then fall back.
+            nextSlot = FillContinueSlots(candidates, slots, nextSlot, requireUniqueFamily: true, requireUniqueShape: true);
+            nextSlot = FillContinueSlots(candidates, slots, nextSlot, requireUniqueFamily: false, requireUniqueShape: true);
+            nextSlot = FillContinueSlots(candidates, slots, nextSlot, requireUniqueFamily: false, requireUniqueShape: false);
+
+            while (nextSlot < slots.Length)
+            {
+                slots[nextSlot] = candidates[0].ShapeId;
+                nextSlot++;
+            }
+
+            return slots;
+        }
+
+        private static int FillContinueSlots(
+            List<ContinueCandidate> candidates,
+            ShapeId[] slots,
+            int nextSlot,
+            bool requireUniqueFamily,
+            bool requireUniqueShape)
+        {
+            var usedShapeIds = new HashSet<ShapeId>();
+            var usedFamilies = new HashSet<string>(StringComparer.Ordinal);
+
+            for (int i = 0; i < nextSlot; i++)
+            {
+                usedShapeIds.Add(slots[i]);
+
+                if (ShapeLibrary.TryGetShape(slots[i], out var usedShape))
+                    usedFamilies.Add(GetShapeFamilyKey(usedShape));
+            }
+
+            for (int i = 0; i < candidates.Count && nextSlot < slots.Length; i++)
+            {
+                ContinueCandidate candidate = candidates[i];
+
+                if (requireUniqueShape && usedShapeIds.Contains(candidate.ShapeId))
+                    continue;
+
+                if (requireUniqueFamily && usedFamilies.Contains(candidate.FamilyKey))
+                    continue;
+
+                slots[nextSlot] = candidate.ShapeId;
+                nextSlot++;
+                usedShapeIds.Add(candidate.ShapeId);
+                usedFamilies.Add(candidate.FamilyKey);
+            }
+
+            return nextSlot;
+        }
+
+        private static int CompareContinueCandidates(ContinueCandidate left, ContinueCandidate right)
+        {
+            int byPlacementCount = right.ValidPlacementCount.CompareTo(left.ValidPlacementCount);
+            if (byPlacementCount != 0)
+                return byPlacementCount;
+
+            int byCellCount = left.CellCount.CompareTo(right.CellCount);
+            if (byCellCount != 0)
+                return byCellCount;
+
+            int byFootprintArea = left.FootprintArea.CompareTo(right.FootprintArea);
+            if (byFootprintArea != 0)
+                return byFootprintArea;
+
+            return left.ShapeId.Value.CompareTo(right.ShapeId.Value);
+        }
+
+        private static int GetShapeBoundingArea(ShapeDefinition shape)
+        {
+            if (shape?.Offsets == null || shape.Offsets.Length == 0)
+                return int.MaxValue;
+
+            int minX = shape.Offsets[0].X;
+            int maxX = minX;
+            int minY = shape.Offsets[0].Y;
+            int maxY = minY;
+
+            for (int i = 1; i < shape.Offsets.Length; i++)
+            {
+                Int2 offset = shape.Offsets[i];
+                if (offset.X < minX) minX = offset.X;
+                if (offset.X > maxX) maxX = offset.X;
+                if (offset.Y < minY) minY = offset.Y;
+                if (offset.Y > maxY) maxY = offset.Y;
+            }
+
+            int width = (maxX - minX) + 1;
+            int height = (maxY - minY) + 1;
+            return width * height;
+        }
+
+        private static string GetShapeFamilyKey(ShapeDefinition shape)
+        {
+            string name = shape?.Name ?? string.Empty;
+
+            if (name.StartsWith("Line", StringComparison.OrdinalIgnoreCase))
+                return "Line";
+
+            if (name.StartsWith("Square", StringComparison.OrdinalIgnoreCase))
+                return "Square";
+
+            if (name.StartsWith("L_", StringComparison.OrdinalIgnoreCase))
+                return "L";
+
+            if (name.StartsWith("T_", StringComparison.OrdinalIgnoreCase))
+                return "T";
+
+            if (name.StartsWith("Plus", StringComparison.OrdinalIgnoreCase))
+                return "Plus";
+
+            if (name.StartsWith("Z_", StringComparison.OrdinalIgnoreCase) || name.StartsWith("Z", StringComparison.OrdinalIgnoreCase))
+                return "Z";
+
+            if (name.StartsWith("S_", StringComparison.OrdinalIgnoreCase) || name.StartsWith("S", StringComparison.OrdinalIgnoreCase))
+                return "S";
+
+            if (name.StartsWith("Corner", StringComparison.OrdinalIgnoreCase))
+                return "Corner";
+
+            if (name.StartsWith("Single", StringComparison.OrdinalIgnoreCase))
+                return "Single";
+
+            return name;
+        }
+
+        private static bool AreAllContinueBlocksPlaceable(ActiveBlocks blocks, BoardState boardState)
+        {
+            if (blocks == null || boardState == null || !blocks.IsFull)
+                return false;
+
+            for (int slot = 0; slot < 3; slot++)
+            {
+                if (!blocks.HasBlockAt(slot))
+                    return false;
+
+                var shapeId = blocks.GetShapeId(slot);
+                if (!ShapeLibrary.TryGetShape(shapeId, out var shape))
+                    return false;
+
+                if (!PlacementSearch.HasAnyValidPlacement(boardState, shape))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private readonly struct ContinueCandidate
+        {
+            public readonly ShapeId ShapeId;
+            public readonly string FamilyKey;
+            public readonly int CellCount;
+            public readonly int ValidPlacementCount;
+            public readonly int FootprintArea;
+
+            public ContinueCandidate(
+                ShapeId shapeId,
+                string familyKey,
+                int cellCount,
+                int validPlacementCount,
+                int footprintArea)
+            {
+                ShapeId = shapeId;
+                FamilyKey = familyKey ?? string.Empty;
+                CellCount = cellCount;
+                ValidPlacementCount = validPlacementCount;
+                FootprintArea = footprintArea;
+            }
         }
         
         /// <summary>
@@ -304,6 +571,23 @@ namespace BlockPuzzle.Core.Engine
             CurrentState = CurrentState.WithActiveBlocks(newActiveBlocks);
             OnStateChanged();
         }
+
+        /// <summary>
+        /// Overrides the active block tray with a deterministic set.
+        /// Intended for tutorial and controlled onboarding flows.
+        /// </summary>
+        public void OverrideActiveBlocks(ShapeId[] shapeIds)
+        {
+            if (shapeIds == null)
+                throw new ArgumentNullException(nameof(shapeIds));
+
+            var newActiveBlocks = new ActiveBlocks();
+            newActiveBlocks.SetBlocks(shapeIds);
+            CurrentState = CurrentState
+                .WithActiveBlocks(newActiveBlocks)
+                .WithGameOverState(false);
+            OnStateChanged();
+        }
         
         /// <summary>
         /// Gets the current game statistics.
@@ -357,6 +641,7 @@ namespace BlockPuzzle.Core.Engine
             
             // Track lines cleared for return value
             int totalLinesCleared = 0;
+            Int2[] clearedPositions = Array.Empty<Int2>();
             var scoreResult = ScoreResult.Empty;
             
             // Check for line clears using static LineDetector
@@ -371,6 +656,9 @@ namespace BlockPuzzle.Core.Engine
                 
                 // Clear lines using static LineClearer
                 var clearResult = LineClearer.ClearLines(CurrentState.Board, fullRows, fullCols);
+                clearedPositions = clearResult.ClearedPositions is Int2[] arr
+                    ? arr
+                    : new List<Int2>(clearResult.ClearedPositions).ToArray();
                 
                 totalLinesCleared = lineResult.FullRowCount + lineResult.FullColumnCount;
                 CurrentState = CurrentState.WithLinesCleared(totalLinesCleared);
@@ -389,17 +677,17 @@ namespace BlockPuzzle.Core.Engine
             }
             else
             {
-                // Break combo if no lines cleared
-                var newCombo = CurrentState.ComboState.ResetCombo();
+                // Allow one setup move before the combo fully breaks.
+                var newCombo = CurrentState.ComboState.ConsumeNonClearMove();
                 CurrentState = CurrentState.WithComboState(newCombo);
-                scoreResult = new ScoreResult(
-                    scoreDelta: 0,
-                    linesCleared: 0,
-                    comboStreak: newCombo.Streak,
-                    comboMultiplier: _scoreConfig.EvaluateComboMultiplier(newCombo.Streak),
-                    baseScore: 0,
-                    lineClearMultiplier: 1.0f,
-                    formulaVersion: _scoreConfig.FormulaVersion);
+                scoreResult = ScoringRules.CalculatePlacementScore(newCombo, placedCount, _scoreConfig);
+
+                if (scoreResult.ScoreDelta > 0)
+                {
+                    int nextScore = AddScoreSafely(CurrentState.Score, scoreResult.ScoreDelta);
+                    CurrentState = CurrentState.WithScore(nextScore);
+                    OnScoreChanged(scoreResult);
+                }
             }
             
             // Increment move count
@@ -410,10 +698,15 @@ namespace BlockPuzzle.Core.Engine
             {
                 SpawnNewBlocks();
             }
+            else if (!CurrentState.IsGameOver && IsGameOver())
+            {
+                CurrentState = CurrentState.WithGameOver();
+                OnGameOver();
+            }
             
             OnStateChanged();
             
-            return new MoveExecutionResult(scoreResult);
+            return new MoveExecutionResult(scoreResult, clearedPositions);
         }
 
         private static int AddScoreSafely(int currentScore, int scoreDelta)
@@ -472,10 +765,12 @@ namespace BlockPuzzle.Core.Engine
         private readonly struct MoveExecutionResult
         {
             public readonly ScoreResult ScoreResult;
+            public readonly Int2[] ClearedPositions;
 
-            public MoveExecutionResult(ScoreResult scoreResult)
+            public MoveExecutionResult(ScoreResult scoreResult, Int2[] clearedPositions)
             {
                 ScoreResult = scoreResult;
+                ClearedPositions = clearedPositions ?? Array.Empty<Int2>();
             }
         }
 

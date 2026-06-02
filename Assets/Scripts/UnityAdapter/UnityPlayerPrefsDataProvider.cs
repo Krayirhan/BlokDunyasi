@@ -3,6 +3,7 @@ using System;
 using System.Threading.Tasks;
 using UnityEngine;
 using BlockPuzzle.Core.Persistence;
+using Debug = BlockPuzzle.Core.Common.GameLogger;
 
 namespace BlockPuzzle.UnityAdapter
 {
@@ -38,7 +39,7 @@ namespace BlockPuzzle.UnityAdapter
             {
                 var fullKey = GAME_DATA_PREFIX + key;
                 _gameStateStore.SaveGame(data, fullKey);
-                Debug.Log($"[UnityPlayerPrefsDataProvider] Saved game data for key: {key}");
+                Debug.Log("[UnityPlayerPrefsDataProvider] Saved game data.");
             }
             catch (Exception e)
             {
@@ -63,7 +64,7 @@ namespace BlockPuzzle.UnityAdapter
                     return Task.FromResult<GameData>(null);
 
                 var data = _gameStateStore.LoadGame(fullKey);
-                Debug.Log($"[UnityPlayerPrefsDataProvider] Loaded game data for key: {key}");
+                Debug.Log("[UnityPlayerPrefsDataProvider] Loaded game data.");
                 return Task.FromResult(data);
             }
             catch (Exception e)
@@ -82,7 +83,7 @@ namespace BlockPuzzle.UnityAdapter
         {
             var fullKey = GAME_DATA_PREFIX + key;
             var hasKey = _gameStateStore.HasSavedGame(fullKey);
-            Debug.Log($"[UnityPlayerPrefsDataProvider] Has game data for key {key}: {hasKey}");
+            Debug.Log($"[UnityPlayerPrefsDataProvider] Has game data: {hasKey}");
             return Task.FromResult(hasKey);
         }
         
@@ -97,7 +98,7 @@ namespace BlockPuzzle.UnityAdapter
             {
                 var fullKey = GAME_DATA_PREFIX + key;
                 _gameStateStore.ClearSavedGame(fullKey);
-                Debug.Log($"[UnityPlayerPrefsDataProvider] Deleted game data for key: {key}");
+                Debug.Log("[UnityPlayerPrefsDataProvider] Deleted game data.");
             }
             catch (Exception e)
             {

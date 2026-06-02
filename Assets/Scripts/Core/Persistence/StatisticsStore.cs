@@ -1,4 +1,6 @@
 // File: Core/Persistence/StatisticsStore.cs
+using BlockPuzzle.Core.Common;
+
 namespace BlockPuzzle.Core.Persistence
 {
     /// <summary>
@@ -6,7 +8,7 @@ namespace BlockPuzzle.Core.Persistence
     /// </summary>
     public sealed class StatisticsStore
     {
-        private const string STATISTICS_KEY = "BlokDunyasi_Statistics";
+        private const string STATISTICS_KEY = SettingsKeys.Statistics;
         private readonly IStorageProvider _storage;
         private readonly IJsonSerializer _serializer;
 

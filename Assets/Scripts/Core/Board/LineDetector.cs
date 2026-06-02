@@ -5,126 +5,101 @@ namespace BlockPuzzle.Core.Board
     /// <summary>
     /// Efficient line detection using pre-computed row/column counts.
     /// Achieves O(width + height) performance by leveraging BoardState's count tracking.
-    /// Reuses internal buffer to avoid allocations on repeated calls.
     /// </summary>
     public static class LineDetector
     {
-        // Reusable result buffer to avoid allocations
-        private static LineDetectResult _cachedResult;
-        
         /// <summary>
         /// Detects all full rows and columns on the board.
         /// Performance: O(width + height) due to count-based detection.
-        /// Allocation: Zero after first call (reuses internal buffer).
+        /// Allocation: creates a fresh result object for the caller.
         /// </summary>
         public static LineDetectResult DetectFullLines(BoardState board)
         {
+            var result = new LineDetectResult(board?.Width ?? 0, board?.Height ?? 0);
+            DetectFullLines(board, result);
+            return result;
+        }
+
+        /// <summary>
+        /// Detects all full rows and columns into a caller-owned reusable result.
+        /// Performance: O(width + height) due to count-based detection.
+        /// Allocation: zero when the provided result is already large enough.
+        /// </summary>
+        public static void DetectFullLines(BoardState board, LineDetectResult result)
+        {
             if (board == null)
                 throw new ArgumentNullException(nameof(board));
-            
-            // Initialize or reuse cached result buffer
-            if (_cachedResult == null)
-            {
-                _cachedResult = new LineDetectResult(board.Width, board.Height);
-            }
-            else
-            {
-                _cachedResult.Clear();
-            }
-            
-            // Detect full rows: O(height)
+            if (result == null)
+                throw new ArgumentNullException(nameof(result));
+
+            result.EnsureCapacity(board.Width, board.Height);
+            result.Clear();
+
             for (int y = 0; y < board.Height; y++)
             {
-                // İlk önce stored count kontrol et
-                if (board.GetRowCount(y) == board.Width)
-                {
-                    // Double-check: Gerçekten tüm hücreler dolu mu?
-                    int actualCount = 0;
-                    for (int x = 0; x < board.Width; x++)
-                    {
-                        if (!board.IsEmpty(x, y))
-                            actualCount++;
-                    }
-                    
-                    // Sadece gerçekten tam dolu olan satırları ekle
-                    if (actualCount == board.Width)
-                    {
-                        _cachedResult.FullRows[_cachedResult.FullRowCount++] = y;
-                    }
-                }
+                if (IsRowActuallyFull(board, y))
+                    result.FullRows[result.FullRowCount++] = y;
             }
-            
-            // Detect full columns: O(width)
+
             for (int x = 0; x < board.Width; x++)
             {
-                // İlk önce stored count kontrol et
-                if (board.GetColCount(x) == board.Height)
-                {
-                    // Double-check: Gerçekten tüm hücreler dolu mu?
-                    int actualCount = 0;
-                    for (int y = 0; y < board.Height; y++)
-                    {
-                        if (!board.IsEmpty(x, y))
-                            actualCount++;
-                    }
-                    
-                    // Sadece gerçekten tam dolu olan sütunları ekle
-                    if (actualCount == board.Height)
-                    {
-                        _cachedResult.FullColumns[_cachedResult.FullColumnCount++] = x;
-                    }
-                }
+                if (IsColumnActuallyFull(board, x))
+                    result.FullColumns[result.FullColumnCount++] = x;
             }
-            
-            return _cachedResult;
         }
-        
+
         /// <summary>
-        /// Checks if any lines are full without allocating result lists.
+        /// Checks if any lines are full without creating a result object.
         /// Useful for quick checks without needing the actual line indices.
         /// </summary>
         public static bool HasAnyFullLines(BoardState board)
         {
             if (board == null)
                 throw new ArgumentNullException(nameof(board));
-            
-            // Check rows - double-check actual cell count
+
             for (int y = 0; y < board.Height; y++)
             {
-                if (board.GetRowCount(y) == board.Width)
-                {
-                    // Verify actual count
-                    int actualCount = 0;
-                    for (int x = 0; x < board.Width; x++)
-                    {
-                        if (!board.IsEmpty(x, y))
-                            actualCount++;
-                    }
-                    
-                    if (actualCount == board.Width)
-                        return true;
-                }
+                if (IsRowActuallyFull(board, y))
+                    return true;
             }
-            
-            // Check columns - double-check actual cell count
+
             for (int x = 0; x < board.Width; x++)
             {
-                if (board.GetColCount(x) == board.Height)
-                {
-                    // Verify actual count
-                    int actualCount = 0;
-                    for (int y = 0; y < board.Height; y++)
-                    {
-                        if (!board.IsEmpty(x, y))
-                            actualCount++;
-                    }
-                    
-                    if (actualCount == board.Height)
-                        return true;
-                }
+                if (IsColumnActuallyFull(board, x))
+                    return true;
             }
-            
+
             return false;
+        }
+
+        private static bool IsRowActuallyFull(BoardState board, int y)
+        {
+            if (board.GetRowCount(y) != board.Width)
+                return false;
+
+            int actualCount = 0;
+            for (int x = 0; x < board.Width; x++)
+            {
+                if (!board.IsEmpty(x, y))
+                    actualCount++;
+            }
+
+            return actualCount == board.Width;
+        }
+
+        private static bool IsColumnActuallyFull(BoardState board, int x)
+        {
+            if (board.GetColCount(x) != board.Height)
+                return false;
+
+            int actualCount = 0;
+            for (int y = 0; y < board.Height; y++)
+            {
+                if (!board.IsEmpty(x, y))
+                    actualCount++;
+            }
+
+            return actualCount == board.Height;
         }
     }
 }

@@ -55,6 +55,8 @@ namespace BlockPuzzle.Core.RNG
         /// Overall success rate across all tracked placements.
         /// </summary>
         public float OverallSuccessRate => _totalPlacements > 0 ? (float)_successfulPlacements / _totalPlacements : 0f;
+        public bool IsPlayerStruggling => _recentPlacementHistory.Count >= 5 && _recentSuccessRate < TargetSuccessRate - 0.18f;
+        public bool IsPlayerDominating => _recentPlacementHistory.Count >= 5 && _recentSuccessRate > TargetSuccessRate + 0.18f;
 
         /// <summary>
         /// Returns recent placement history in chronological order (oldest to newest).
@@ -125,6 +127,18 @@ namespace BlockPuzzle.Core.RNG
         {
             // Add challenges when player is performing well above target
             return _recentSuccessRate > TargetSuccessRate + 0.15f && DifficultyLevel < MaxDifficulty;
+        }
+
+        /// <summary>
+        /// Fairness boost applied when player is struggling.
+        /// </summary>
+        public float GetFairnessBoost()
+        {
+            if (!IsPlayerStruggling)
+                return 1f;
+
+            float pressure = ClampFloat((TargetSuccessRate - _recentSuccessRate) * 2.2f, 0f, 1f);
+            return 1f + (pressure * 0.9f);
         }
         
         /// <summary>

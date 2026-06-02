@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using Debug = BlockPuzzle.Core.Common.GameLogger;
 
 namespace BlockPuzzle.UnityAdapter.Boot
 {

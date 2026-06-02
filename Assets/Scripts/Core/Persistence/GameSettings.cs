@@ -48,6 +48,16 @@ namespace BlockPuzzle.Core.Persistence
         /// Whether to show valid placement indicators.
         /// </summary>
         public bool ShowValidPlacements { get; set; } = false;
+
+        /// <summary>
+        /// Whether to show placement ghost preview during drag.
+        /// </summary>
+        public bool ShowPlacementPreview { get; set; } = true;
+
+        /// <summary>
+        /// Whether to show line clear preview/highlight during drag.
+        /// </summary>
+        public bool ShowLineClearPreview { get; set; } = true;
         
         /// <summary>
         /// Whether to use automatic dark mode based on system.
@@ -128,6 +138,9 @@ namespace BlockPuzzle.Core.Persistence
             MusicVolume = ClampVolume(MusicVolume);
             AnimationSpeed = ClampFloat(AnimationSpeed, 0.5f, 2.0f);
             ScreenShakeIntensity = ClampFloat(ScreenShakeIntensity, 0.0f, 1.0f);
+
+            ShowPlacementHints = ShowPlacementPreview;
+            ShowValidPlacements = ShowLineClearPreview;
             
             // Ensure non-null strings
             Language ??= "en";

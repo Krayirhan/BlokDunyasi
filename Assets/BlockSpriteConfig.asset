@@ -13,14 +13,14 @@ MonoBehaviour:
   m_Name: BlockSpriteConfig
   m_EditorClassIdentifier: Assembly-CSharp::BlockPuzzle.UnityAdapter.Configuration.BlockSpriteConfig
   blockSprites:
-  - {fileID: -6429493399158520243, guid: be8555b17da0d764fadec1b53ebfb059, type: 3}
-  - {fileID: -2093324750932669864, guid: 42d1b74b88d6eed4383124ff83eed2e2, type: 3}
-  - {fileID: -241673516757495250, guid: 8a476cdb941f9524fada8bb475de8445, type: 3}
-  - {fileID: 4121880872312635667, guid: d4498e18477db1446967013821c29c4f, type: 3}
-  - {fileID: -6099873399732076034, guid: bcbc803498aec5243a3520641ca2ceed, type: 3}
-  - {fileID: 8166710274925509176, guid: 6cfb81b4624130b46812b9c10ff04569, type: 3}
-  - {fileID: -8425141836431729757, guid: bd8295e94790d314fb09775b506505f5, type: 3}
-  - {fileID: -1629362560720184693, guid: 9f4f0ee29da62c4449264b6f67fabeac, type: 3}
+  - {fileID: -2065601351184378588, guid: 1a53777704173ff41a9cc01cc4d85fe7, type: 3}
+  - {fileID: -6460966356754669824, guid: 6b4c52ca65b8d2b409304115eccc281b, type: 3}
+  - {fileID: 6785705597712900403, guid: dead1a9abadf20848b534cfa37161999, type: 3}
+  - {fileID: 8728634289767688899, guid: b77200fb0f5575449a344fc0fef85192, type: 3}
+  - {fileID: -5248412630659397112, guid: 79bde779a597bd5419707b2a48c11866, type: 3}
+  - {fileID: 5733873807261791695, guid: 57977af60b4bca94e98c83daf5fd7013, type: 3}
+  - {fileID: 7890159296205260118, guid: 59b94435282c3c341a472463f3da0204, type: 3}
+  - {fileID: 7890159296205260118, guid: 59b94435282c3c341a472463f3da0204, type: 3}
   emptyCellSprite: {fileID: 3396017925731008176, guid: 93dbe75d94f7acf48a9f76b8f51f6459, type: 3}
   filledCellSprite: {fileID: 7905411461583814485, guid: 391e2af4353e02e489c29fc1c6cd6732, type: 3}
   previewValidSprite: {fileID: -1457657474930126242, guid: bc36c35bedd401a418b2a6d64e9b6262, type: 3}

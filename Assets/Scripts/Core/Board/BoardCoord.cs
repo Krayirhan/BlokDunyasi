@@ -7,9 +7,9 @@ namespace BlockPuzzle.Core.Board
     /// Provides allocation-free coordinate conversion and enumeration utilities.
     /// 
     /// Grid coordinate system:
-    /// - Origin: bottom-left (0,0)
+    /// - Origin: top-left (0,0)
     /// - X axis: increases to the right
-    /// - Y axis: increases upward
+    /// - Y axis: increases downward
     /// - Board size: width x height
     /// </summary>
     public static class BoardCoord

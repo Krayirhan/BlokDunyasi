@@ -8,7 +8,15 @@ namespace BlockPuzzle.Core.Engine
 {
     /// <summary>
     /// Complete game state including board, score, active blocks, and game status.
-    /// Immutable structure for safe state management and undo/redo support.
+    /// <para>
+    /// <see cref="GameState"/> is not deeply immutable. It holds mutable child objects such as
+    /// <see cref="BoardState"/>, <see cref="ActiveBlocks"/>, and <see cref="ComboState"/>.
+    /// </para>
+    /// <para>
+    /// <see cref="GameEngine.CurrentState"/> should be treated as live state. Code that needs
+    /// isolation for replay, persistence, undo, or assertions must call <see cref="Clone"/> or
+    /// <see cref="CreateSnapshot"/> to obtain a deep copy.
+    /// </para>
     /// </summary>
     [Serializable]
     public class GameState
@@ -129,11 +137,18 @@ namespace BlockPuzzle.Core.Engine
         }
         
         /// <summary>
-        /// Creates a copy of this game state.
+        /// Creates a deep copy of this game state and all mutable child state.
         /// </summary>
         /// <returns>Deep copy of current state</returns>
         public GameState Clone()
         {
+            if (Board == null)
+                throw new InvalidOperationException("Cannot clone GameState when Board is null.");
+            if (ActiveBlocks == null)
+                throw new InvalidOperationException("Cannot clone GameState when ActiveBlocks is null.");
+            if (ComboState == null)
+                throw new InvalidOperationException("Cannot clone GameState when ComboState is null.");
+
             return new GameState(Board.Width, Board.Height)
             {
                 Board = Board.Clone(),
@@ -147,6 +162,14 @@ namespace BlockPuzzle.Core.Engine
                 LastMoveTime = LastMoveTime
             };
         }
+
+        /// <summary>
+        /// Creates a deep snapshot of this state for isolation from later mutations.
+        /// </summary>
+        public GameState CreateSnapshot()
+        {
+            return Clone();
+        }
         
         /// <summary>
         /// Creates a new game state with updated board.
@@ -155,8 +178,11 @@ namespace BlockPuzzle.Core.Engine
         /// <returns>New GameState with updated board</returns>
         public GameState WithBoard(BoardState newBoard)
         {
+            if (newBoard == null)
+                throw new ArgumentNullException(nameof(newBoard));
+
             var newState = Clone();
-            newState.Board = newBoard;
+            newState.Board = newBoard.Clone();
             return newState;
         }
         
@@ -179,8 +205,11 @@ namespace BlockPuzzle.Core.Engine
         /// <returns>New GameState with updated active blocks</returns>
         public GameState WithActiveBlocks(ActiveBlocks newActiveBlocks)
         {
+            if (newActiveBlocks == null)
+                throw new ArgumentNullException(nameof(newActiveBlocks));
+
             var newState = Clone();
-            newState.ActiveBlocks = newActiveBlocks;
+            newState.ActiveBlocks = newActiveBlocks.Clone();
             return newState;
         }
         
@@ -191,8 +220,11 @@ namespace BlockPuzzle.Core.Engine
         /// <returns>New GameState with updated combo state</returns>
         public GameState WithComboState(ComboState newComboState)
         {
+            if (newComboState == null)
+                throw new ArgumentNullException(nameof(newComboState));
+
             var newState = Clone();
-            newState.ComboState = newComboState;
+            newState.ComboState = newComboState.Clone();
             return newState;
         }
         
@@ -204,6 +236,16 @@ namespace BlockPuzzle.Core.Engine
         {
             var newState = Clone();
             newState.IsGameOver = true;
+            return newState;
+        }
+
+        /// <summary>
+        /// Creates a new game state with explicit game over flag value.
+        /// </summary>
+        public GameState WithGameOverState(bool isGameOver)
+        {
+            var newState = Clone();
+            newState.IsGameOver = isGameOver;
             return newState;
         }
         

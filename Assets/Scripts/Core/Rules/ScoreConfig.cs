@@ -35,10 +35,17 @@ namespace BlockPuzzle.Core.Rules
     [Serializable]
     public sealed class ScoreConfig
     {
-        public const int DefaultFormulaVersion = 1;
+        public const int DefaultFormulaVersion = 9;
 
         public int FormulaVersion { get; }
         public int BasePointsPerLine { get; }
+        public int BasePointsPerPlacement { get; }
+        public int BasePointsPerPlacedCell { get; }
+        public int HighRiskPlacementBonus { get; }
+        public int MultiLineFinisherBonus { get; }
+        public int HighComboClearBonus { get; }
+        public float PlacementComboStepMultiplier { get; }
+        public float PlacementComboMaxMultiplier { get; }
         public ScoreRoundingMode RoundingMode { get; }
         public ScoreCurvePoint[] LineMultiplierCurve { get; }
         public ScoreCurvePoint[] ComboMultiplierCurve { get; }
@@ -48,6 +55,13 @@ namespace BlockPuzzle.Core.Rules
         public ScoreConfig(
             int formulaVersion,
             int basePointsPerLine,
+            int basePointsPerPlacement,
+            int basePointsPerPlacedCell,
+            int highRiskPlacementBonus,
+            int multiLineFinisherBonus,
+            int highComboClearBonus,
+            float placementComboStepMultiplier,
+            float placementComboMaxMultiplier,
             ScoreRoundingMode roundingMode,
             ScoreCurvePoint[] lineMultiplierCurve,
             ScoreCurvePoint[] comboMultiplierCurve)
@@ -56,6 +70,20 @@ namespace BlockPuzzle.Core.Rules
                 throw new ArgumentOutOfRangeException(nameof(formulaVersion), "Formula version must be positive.");
             if (basePointsPerLine < 0)
                 throw new ArgumentOutOfRangeException(nameof(basePointsPerLine), "Base points cannot be negative.");
+            if (basePointsPerPlacement < 0)
+                throw new ArgumentOutOfRangeException(nameof(basePointsPerPlacement), "Placement base points cannot be negative.");
+            if (basePointsPerPlacedCell < 0)
+                throw new ArgumentOutOfRangeException(nameof(basePointsPerPlacedCell), "Placement per-cell points cannot be negative.");
+            if (highRiskPlacementBonus < 0)
+                throw new ArgumentOutOfRangeException(nameof(highRiskPlacementBonus), "High risk bonus cannot be negative.");
+            if (multiLineFinisherBonus < 0)
+                throw new ArgumentOutOfRangeException(nameof(multiLineFinisherBonus), "Finisher bonus cannot be negative.");
+            if (highComboClearBonus < 0)
+                throw new ArgumentOutOfRangeException(nameof(highComboClearBonus), "High combo clear bonus cannot be negative.");
+            if (placementComboStepMultiplier < 0f)
+                throw new ArgumentOutOfRangeException(nameof(placementComboStepMultiplier), "Placement combo step multiplier cannot be negative.");
+            if (placementComboMaxMultiplier < 1f)
+                throw new ArgumentOutOfRangeException(nameof(placementComboMaxMultiplier), "Placement combo max multiplier must be at least 1.");
             if (lineMultiplierCurve == null || lineMultiplierCurve.Length == 0)
                 throw new ArgumentException("Line multiplier curve must contain at least one point.", nameof(lineMultiplierCurve));
             if (comboMultiplierCurve == null || comboMultiplierCurve.Length == 0)
@@ -63,6 +91,13 @@ namespace BlockPuzzle.Core.Rules
 
             FormulaVersion = formulaVersion;
             BasePointsPerLine = basePointsPerLine;
+            BasePointsPerPlacement = basePointsPerPlacement;
+            BasePointsPerPlacedCell = basePointsPerPlacedCell;
+            HighRiskPlacementBonus = highRiskPlacementBonus;
+            MultiLineFinisherBonus = multiLineFinisherBonus;
+            HighComboClearBonus = highComboClearBonus;
+            PlacementComboStepMultiplier = placementComboStepMultiplier;
+            PlacementComboMaxMultiplier = placementComboMaxMultiplier;
             RoundingMode = roundingMode;
             LineMultiplierCurve = CloneAndSort(lineMultiplierCurve);
             ComboMultiplierCurve = CloneAndSort(comboMultiplierCurve);
@@ -126,17 +161,28 @@ namespace BlockPuzzle.Core.Rules
         {
             return new ScoreConfig(
                 formulaVersion: DefaultFormulaVersion,
-                basePointsPerLine: 10,
+                basePointsPerLine: 32,
+                basePointsPerPlacement: 8,
+                basePointsPerPlacedCell: 3,
+                highRiskPlacementBonus: 8,
+                multiLineFinisherBonus: 28,
+                highComboClearBonus: 36,
+                placementComboStepMultiplier: 0.09f,
+                placementComboMaxMultiplier: 1.75f,
                 roundingMode: ScoreRoundingMode.Nearest,
                 lineMultiplierCurve: new[]
                 {
-                    new ScoreCurvePoint(1, 1.0f),
-                    new ScoreCurvePoint(2, 1.5f)
+                    new ScoreCurvePoint(1, 1.6f),
+                    new ScoreCurvePoint(2, 2.6f),
+                    new ScoreCurvePoint(3, 3.9f),
+                    new ScoreCurvePoint(4, 5.4f)
                 },
                 comboMultiplierCurve: new[]
                 {
-                    new ScoreCurvePoint(1, 1.0f),
-                    new ScoreCurvePoint(2, 1.1f)
+                    new ScoreCurvePoint(1, 1.1f),
+                    new ScoreCurvePoint(2, 1.55f),
+                    new ScoreCurvePoint(5, 2.45f),
+                    new ScoreCurvePoint(10, 3.5f)
                 });
         }
     }

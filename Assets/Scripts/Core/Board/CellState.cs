@@ -44,7 +44,7 @@ namespace BlockPuzzle.Core.Board
         
         /// <summary>
         /// Predefined empty cell constant.
-        /// Default struct values: IsEmpty=false, BlockId=0, ColorId=0
+        /// Default struct values: BlockId=0, ColorId=0 (IsEmpty=true)
         /// We treat BlockId=0 as empty.
         /// </summary>
         public static readonly CellState Empty = default;

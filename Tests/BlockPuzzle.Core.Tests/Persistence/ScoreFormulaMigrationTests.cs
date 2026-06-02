@@ -15,6 +15,7 @@ namespace BlockPuzzle.Core.Tests.Persistence
             {
                 Score = 250,
                 ComboStreak = 4,
+                ComboGraceMovesRemaining = 1,
                 ScoreFormulaVersion = 1
             };
 
@@ -25,6 +26,7 @@ namespace BlockPuzzle.Core.Tests.Persistence
             Assert.AreEqual(3, result.TargetVersion);
             Assert.AreEqual(250, data.Score);
             Assert.AreEqual(4, data.ComboStreak);
+            Assert.AreEqual(1, data.ComboGraceMovesRemaining);
             Assert.AreEqual(3, data.ScoreFormulaVersion);
         }
 
@@ -35,6 +37,7 @@ namespace BlockPuzzle.Core.Tests.Persistence
             {
                 Score = -10,
                 ComboStreak = -2,
+                ComboGraceMovesRemaining = -1,
                 ScoreFormulaVersion = ScoreConfig.DefaultFormulaVersion
             };
 
@@ -43,6 +46,7 @@ namespace BlockPuzzle.Core.Tests.Persistence
             Assert.IsTrue(result.Migrated);
             Assert.AreEqual(0, data.Score);
             Assert.AreEqual(0, data.ComboStreak);
+            Assert.AreEqual(0, data.ComboGraceMovesRemaining);
         }
     }
 }

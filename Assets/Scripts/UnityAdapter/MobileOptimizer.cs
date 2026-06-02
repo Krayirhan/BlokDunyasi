@@ -1,6 +1,7 @@
 // File: UnityAdapter/MobileOptimizer.cs
 
 using UnityEngine;
+using Debug = BlockPuzzle.Core.Common.GameLogger;
 
 namespace BlockPuzzle.UnityAdapter
 {

@@ -52,6 +52,12 @@ namespace BlockPuzzle.Core.Persistence
                 sanitized = true;
             }
 
+            if (data.ComboGraceMovesRemaining < 0)
+            {
+                data.ComboGraceMovesRemaining = 0;
+                sanitized = true;
+            }
+
             bool versionChanged = sourceVersion != targetVersion;
             data.ScoreFormulaVersion = targetVersion;
 

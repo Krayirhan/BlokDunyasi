@@ -1,6 +1,7 @@
 using BlockPuzzle.Core.Common;
 using BlockPuzzle.Core.Board;
 using BlockPuzzle.Core.Rules;
+using System;
 
 namespace BlockPuzzle.Core.Game
 {
@@ -22,9 +23,10 @@ namespace BlockPuzzle.Core.Game
         public int ScoreDelta => ScoreResult.ScoreDelta;
         public int LinesCleared => ScoreResult.LinesCleared;
         public bool TriggersSpawn { get; private set; }
+        public Int2[] ClearedPositions { get; private set; }
         
         private MoveResult(bool success, BoardState newBoardState, ScoreResult scoreResult, 
-            int totalScore, Int2 placementPosition, int shapeIndex, string errorMessage = null, bool triggersSpawn = false)
+            int totalScore, Int2 placementPosition, int shapeIndex, string errorMessage = null, bool triggersSpawn = false, Int2[] clearedPositions = null)
         {
             IsSuccess = success;
             NewBoardState = newBoardState;
@@ -34,9 +36,10 @@ namespace BlockPuzzle.Core.Game
             ShapeIndex = shapeIndex;
             ErrorMessage = errorMessage;
             TriggersSpawn = triggersSpawn;
+            ClearedPositions = clearedPositions ?? Array.Empty<Int2>();
         }
         
-        public static MoveResult CreateSuccess(int totalScore, ScoreResult scoreResult, bool triggersSpawn = false)
+        public static MoveResult CreateSuccess(int totalScore, ScoreResult scoreResult, bool triggersSpawn = false, Int2[] clearedPositions = null)
         {
             return new MoveResult(
                 success: true,
@@ -46,7 +49,8 @@ namespace BlockPuzzle.Core.Game
                 placementPosition: Int2.Zero,
                 shapeIndex: 0,
                 errorMessage: null,
-                triggersSpawn: triggersSpawn);
+            triggersSpawn: triggersSpawn,
+            clearedPositions: clearedPositions);
         }
         
         public static MoveResult Failed(string errorMessage)

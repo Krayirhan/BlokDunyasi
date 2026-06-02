@@ -37,7 +37,7 @@ namespace BlockPuzzle.Core.Tests.Persistence
 
             Assert.IsTrue(move1.Success);
             Assert.IsTrue(move2.Success);
-            Assert.AreEqual(21, engine.CurrentState.Score);
+            Assert.AreEqual(46, engine.CurrentState.Score);
             Assert.AreEqual(2, engine.CurrentState.ComboState.Streak);
 
             const int formulaVersion = 9;
@@ -57,7 +57,7 @@ namespace BlockPuzzle.Core.Tests.Persistence
         }
 
         [Test]
-        public void SaveLoadRoundTrip_AfterNoClearMove_KeepsComboResetState()
+        public void SaveLoadRoundTrip_AfterSetupMove_PreservesBufferedComboState()
         {
             var engine = new GameEngine(new SeededRng(20260227), boardWidth: 4, boardHeight: 4);
             engine.StartNewGame(20260227);
@@ -80,8 +80,9 @@ namespace BlockPuzzle.Core.Tests.Persistence
 
             Assert.IsTrue(clearMove.Success);
             Assert.IsTrue(noClearMove.Success);
-            Assert.AreEqual(0, noClearMove.ScoreDelta);
-            Assert.AreEqual(0, engine.CurrentState.ComboState.Streak);
+            Assert.Greater(noClearMove.ScoreDelta, 0);
+            Assert.AreEqual(1, engine.CurrentState.ComboState.Streak);
+            Assert.AreEqual(0, engine.CurrentState.ComboState.GraceMovesRemaining);
 
             var snapshot = GameData.FromGameState(
                 engine.CurrentState,
@@ -91,7 +92,8 @@ namespace BlockPuzzle.Core.Tests.Persistence
 
             var restored = snapshot.ToGameState();
             Assert.AreEqual(engine.CurrentState.Score, restored.Score);
-            Assert.AreEqual(0, restored.ComboState.Streak);
+            Assert.AreEqual(1, restored.ComboState.Streak);
+            Assert.AreEqual(1, restored.ComboState.GraceMovesRemaining);
         }
     }
 }

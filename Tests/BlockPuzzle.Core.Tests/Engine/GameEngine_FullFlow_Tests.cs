@@ -12,7 +12,7 @@ namespace BlockPuzzle.Core.Tests.Engine
     public class GameEngineFullFlowTests
     {
         [Test]
-        public void ThreeMoves_ClearsLine_ResetsCombo_ThenSpawnsNextSet()
+        public void ThreeMoves_ClearThenSetupMoveThenResetOnSecondMiss_ThenSpawnsNextSet()
         {
             var rng = new SeededRng(7);
             var engine = new GameEngine(rng, boardWidth: 4, boardHeight: 4);
@@ -43,7 +43,7 @@ namespace BlockPuzzle.Core.Tests.Engine
             Assert.IsTrue(move3.Success);
             Assert.IsTrue(move3.TriggersSpawn);
 
-            Assert.AreEqual(10, engine.CurrentState.Score);
+            Assert.AreEqual(28, engine.CurrentState.Score);
             Assert.AreEqual(0, engine.CurrentState.ComboState.Streak);
             Assert.AreEqual(3, engine.CurrentState.MoveCount);
             Assert.IsTrue(engine.CurrentState.ActiveBlocks.IsFull);

@@ -37,6 +37,43 @@ namespace BlockPuzzle.Core.Tests.Replay
             CollectionAssert.AreEqual(expectedSnapshot.ActiveBlockColors, actualSnapshot.ActiveBlockColors);
         }
 
+        [Test]
+        public void TakingSnapshots_DoesNotChangeReplayContinuity()
+        {
+            const int seed = 424242;
+            const int maxMoves = 20;
+
+            var baseline = CreateEngine(seed);
+            var replayMoves = CaptureReplayMoves(baseline, maxMoves);
+            Assert.GreaterOrEqual(replayMoves.Count, 5, "Replay continuity test needs enough moves to be meaningful.");
+            var expectedSnapshot = Snapshot.FromState(baseline.CurrentState);
+
+            var withSnapshots = CreateEngine(seed);
+            for (int i = 0; i < replayMoves.Count; i++)
+            {
+                var snapshotState = withSnapshots.GetStateSnapshot();
+                var snapshot = Snapshot.FromState(snapshotState);
+                var expected = replayMoves[i];
+
+                Assert.AreEqual(withSnapshots.CurrentState.Score, snapshot.Score);
+                Assert.AreEqual(withSnapshots.CurrentState.MoveCount, snapshot.MoveCount);
+                CollectionAssert.AreEqual(withSnapshots.CurrentState.Board.GetCells(), snapshot.BoardCells);
+
+                var move = withSnapshots.AttemptMove(expected.SlotIndex, expected.Position);
+                Assert.IsTrue(move.Success, $"Replay move {i} failed while snapshots were being taken.");
+            }
+
+            var actualSnapshot = Snapshot.FromState(withSnapshots.CurrentState);
+
+            Assert.AreEqual(expectedSnapshot.Score, actualSnapshot.Score);
+            Assert.AreEqual(expectedSnapshot.Combo, actualSnapshot.Combo);
+            Assert.AreEqual(expectedSnapshot.TotalLinesCleared, actualSnapshot.TotalLinesCleared);
+            Assert.AreEqual(expectedSnapshot.MoveCount, actualSnapshot.MoveCount);
+            CollectionAssert.AreEqual(expectedSnapshot.BoardCells, actualSnapshot.BoardCells);
+            CollectionAssert.AreEqual(expectedSnapshot.ActiveBlockSlots, actualSnapshot.ActiveBlockSlots);
+            CollectionAssert.AreEqual(expectedSnapshot.ActiveBlockColors, actualSnapshot.ActiveBlockColors);
+        }
+
         private static GameEngine CreateEngine(int seed)
         {
             var engine = new GameEngine(new SeededRng(seed), boardWidth: 10, boardHeight: 10);

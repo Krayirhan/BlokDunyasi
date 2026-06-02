@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEditor.U2D;
 using UnityEngine;
 using UnityEngine.U2D;
+using Debug = BlockPuzzle.Core.Common.GameLogger;
 
 public static class SpriteAtlasBuilder
 {

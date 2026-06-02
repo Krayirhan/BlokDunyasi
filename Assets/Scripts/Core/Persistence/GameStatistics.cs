@@ -70,6 +70,7 @@ namespace BlockPuzzle.Core.Persistence
         /// Top scores (highest scores across all games).
         /// </summary>
         public List<int> TopScores { get; set; }
+        public List<int> WeeklyTopScores { get; set; }
         
         /// <summary>
         /// Achievement unlocks by ID.
@@ -100,11 +101,17 @@ namespace BlockPuzzle.Core.Persistence
         /// Perfect games (no mistakes/optimal play).
         /// </summary>
         public int PerfectGames { get; set; }
+
+        public int DailyMissionCompletions { get; set; }
+        public int WeeklyMissionCompletions { get; set; }
+        public int CurrentDailyMissionProgress { get; set; }
+        public int CurrentWeeklyMissionProgress { get; set; }
         
         public GameStatistics()
         {
             RecentScores = new List<int>();
             TopScores = new List<int>();
+            WeeklyTopScores = new List<int>();
             UnlockedAchievements = new HashSet<string>();
             DailyChallengeCompletions = new Dictionary<DateTime, int>();
             LastPlayDate = DateTime.MinValue;
@@ -122,6 +129,7 @@ namespace BlockPuzzle.Core.Persistence
             int linesCleared, int highestCombo)
         {
             GamesPlayed++;
+            GamesCompleted++;
             TotalPlayTime += sessionTime;
             TotalBlocksPlaced += blocksPlaced;
             TotalLinesCleared += linesCleared;
@@ -143,6 +151,7 @@ namespace BlockPuzzle.Core.Persistence
 
             // Track top scores
             AddTopScore(score, 5);
+            AddWeeklyTopScore(score, 5);
                 
             // Update daily streak
             UpdateDailyStreak();
@@ -234,6 +243,27 @@ namespace BlockPuzzle.Core.Persistence
             var resultCount = count < 0 ? 0 : Math.Min(count, TopScores.Count);
             return TopScores.Take(resultCount).ToList();
         }
+
+        public void AddWeeklyTopScore(int score, int maxCount)
+        {
+            if (WeeklyTopScores == null)
+                WeeklyTopScores = new List<int>();
+
+            WeeklyTopScores.Add(score);
+            WeeklyTopScores.Sort((a, b) => b.CompareTo(a));
+
+            if (WeeklyTopScores.Count > maxCount)
+                WeeklyTopScores.RemoveRange(maxCount, WeeklyTopScores.Count - maxCount);
+        }
+
+        public List<int> GetWeeklyTopScores(int count = 5)
+        {
+            if (WeeklyTopScores == null || WeeklyTopScores.Count == 0)
+                return new List<int>();
+
+            var resultCount = count < 0 ? 0 : Math.Min(count, WeeklyTopScores.Count);
+            return WeeklyTopScores.Take(resultCount).ToList();
+        }
         
         /// <summary>
         /// Gets blocks placed per hour rate.
@@ -293,6 +323,21 @@ namespace BlockPuzzle.Core.Persistence
         public static GameStatistics CreateDefault()
         {
             return new GameStatistics();
+        }
+
+        public void RecordMissionProgress(int progressDelta, bool dailyCompleted, bool weeklyCompleted)
+        {
+            if (progressDelta > 0)
+            {
+                CurrentDailyMissionProgress += progressDelta;
+                CurrentWeeklyMissionProgress += progressDelta;
+            }
+
+            if (dailyCompleted)
+                DailyMissionCompletions++;
+
+            if (weeklyCompleted)
+                WeeklyMissionCompletions++;
         }
     }
 }

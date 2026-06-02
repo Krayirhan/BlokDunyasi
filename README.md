@@ -1,163 +1,185 @@
-﻿# 🎮 Blok Dünyası
+# Blok Dunyasi
 
-**Blok Dünyası**, Unity 6 ile geliştirilmiş bağımlılık yapan bir blok bulmaca oyunudur. Tetris ve Block Blast tarzı oyunlardan ilham alınarak tasarlanmıştır.
+Blok Dunyasi, Unity 6 ile gelistirilmis bir mobil block puzzle oyunudur.
 
----
+## Active Unity Project Root
 
-## 🎯 Oyun Hakkında
+Bu repository icinde acilmasi gereken tek production Unity proje koku:
 
-Blok Dünyası'nda amacınız, farklı şekillerdeki blokları 8x8 (veya 10x10) ızgaraya stratejik olarak yerleştirerek satır ve sütunları tamamlamaktır. Tamamlanan satır/sütunlar temizlenir ve puan kazanırsınız!
+```text
+d:\Unity_Projeler\BlokDunyasi\BlokDunyasi
+```
 
-### ✨ Temel Özellikler
+Unity Hub veya Unity Editor ile dogrudan bu klasor acilmalidir.
 
-- 🧩 **Çeşitli Blok Şekilleri** - Tekli karelerden 3x3 kare bloklara kadar 20+ farklı şekil
-- 🎨 **Renkli Görsel Tasarım** - 8 farklı renkte bloklar
-- 📱 **Mobil Dostu** - Dokunmatik sürükle-bırak kontrolü (Unity New Input System)
-- 💾 **Otomatik Kayıt** - Oyun durumu otomatik olarak kaydedilir
-- 🏆 **En Yüksek Skor** - Rekorunuzu takip edin
-- 🔥 **Kombo Sistemi** - Ardışık temizlemelerle çarpan bonusu
+## Do Not Open Outer Root
 
----
+Repository dis kokunde de `Assets/`, `Packages/` ve `ProjectSettings/` klasorleri bulundugu icin ikinci bir Unity projesi gibi gorunebilir. Ancak bu dis kok production build source-of-truth degildir.
 
-## 🕹️ Nasıl Oynanır?
+Kanit:
 
-1. **Blok Seç** - Ekranın altındaki 3 bloktan birini seçin
-2. **Sürükle** - Bloğu parmağınızla (veya fare ile) ızgara üzerine sürükleyin
-3. **Yerleştir** - Yeşil önizleme göründüğünde bırakın
-4. **Temizle** - Satır veya sütun tamamlandığında otomatik temizlenir
-5. **Tekrarla** - 3 blok bitince yeni set gelir
+- Dis kok dosyasi: `d:\Unity_Projeler\BlokDunyasi\ProjectSettings\EditorBuildSettings.asset`
+- Gozlem: `m_Scenes: []`
+- Ic kok dosyasi: `d:\Unity_Projeler\BlokDunyasi\BlokDunyasi\ProjectSettings\EditorBuildSettings.asset`
+- Gozlem: production scene listesi yalniz burada tanimli
 
-### 💡 İpuçları
+Bu nedenle build, scene acma ve sonraki teknik isler yalniz ic kok uzerinden yapilmalidir.
 
-- Köşeleri boş bırakmamaya çalışın
-- Büyük blokları önce yerleştirin
-- Birden fazla satır/sütunu aynı anda temizleyerek yüksek puan alın
-- Kombo zinciri kurmaya çalışın!
+## Oyun Hakkinda
 
----
+Blok Dunyasi'nda amac, farkli sekillerdeki bloklari 8x8 veya 10x10 izgara uzerine yerlestirerek satir ve sutunlari tamamlamaktir. Tamamlanan satir ve sutunlar temizlenir, puan kazanilir.
 
-## 🏗️ Teknik Yapı
+### Temel Ozellikler
+
+- Cesitli blok sekilleri
+- Mobil surukle-birak kontrolu
+- Otomatik kayit
+- En yuksek skor takibi
+- Kombo sistemi
+
+## UI Controller Responsibilities
+
+UI controller facade split notes live in [Docs/UIControllerResponsibilities.md](Docs/UIControllerResponsibilities.md). `MainMenuController` remains the menu flow facade and `HudView` remains the gameplay HUD event facade; layout, localization and presentation logic are being pushed behind internal presenters without changing scene bindings.
+
+## UI Progress Ownership
+
+Progress, reward, mission, target and header ownership notes live in [Docs/UIProgressRewardOwnership.md](Docs/UIProgressRewardOwnership.md). The current contract is: `MainMenuProgressionUI` owns main-menu progression summary rendering, `TargetGoalSystem` owns gameplay target/progress rendering, `HudView` owns score/combo/status rendering, and `ProgressBarLayout` is kept only as a deprecated compatibility stub.
+
+## Teknik Yapi
 
 ### Mimari
 
-Proje **Clean Architecture** prensiplerine uygun şekilde tasarlanmıştır:
+Proje katmanlari:
 
-```
-┌──────────────────────────────────────────────┐
-│                 Unity Layer                  │
-│         (MonoBehaviours, UI, Input)         │
-├──────────────────────────────────────────────┤
-│              UnityAdapter Layer             │
-│    (GameBootstrap, SimpleGridView, Input)   │
-├──────────────────────────────────────────────┤
-│                 Core Layer                   │
-│    (GameEngine, PlacementEngine, Scoring)   │
-│           ✨ Unity'den Bağımsız ✨          │
-└──────────────────────────────────────────────┘
+```text
+Unity Layer
+UnityAdapter Layer
+Core Layer
 ```
 
 ### Teknolojiler
 
-| Teknoloji | Kullanım |
-|-----------|----------|
+| Teknoloji | Kullanim |
+|---|---|
 | Unity 6 | Oyun motoru |
-| C# 9+ | Programlama dili |
-| New Input System | Dokunmatik/fare girişi |
-| EnhancedTouch API | Mobil dokunmatik desteği |
-| ScriptableObjects | Sprite ve ayar yönetimi |
-| Assembly Definitions | Modüler derleme |
+| C# | Programlama dili |
+| New Input System | Dokunmatik/fare girisi |
+| EnhancedTouch API | Mobil dokunmatik destegi |
+| ScriptableObjects | Ayar ve asset yonetimi |
 
-### Klasör Yapısı
+### Klasor Yapisi
 
-```
+```text
 Assets/
-├── Scripts/
-│   ├── Core/           # Unity'den bağımsız oyun mantığı
-│   │   ├── Board/      # Tahta ve hücre yönetimi
-│   │   ├── Engine/     # Oyun motoru ve yerleştirme
-│   │   ├── Shapes/     # Blok şekilleri
-│   │   ├── Rules/      # Puanlama kuralları
-│   │   ├── RNG/        # Rastgele blok üretimi
-│   │   └── Persistence/# Kayıt/yükleme sistemi
-│   ├── UnityAdapter/   # Unity entegrasyonu
-│   │   ├── Boot/       # GameBootstrap
-│   │   ├── Input/      # Drag/Preview sistemleri
-│   │   ├── Blocks/     # NewSimpleBlock, NewBlockTray
-│   │   ├── Grid/       # SimpleGridView
-│   │   └── UI/         # UIController, GameOverView
-│   └── Editor/         # Editor araçları
-├── Scenes/             # Oyun sahneleri
-├── Prefabs/            # Prefab dosyaları
-├── Resources/          # Runtime yüklenen dosyalar
-└── Images/             # Sprite dosyaları
+  Scripts/
+    Core/
+    UnityAdapter/
+    UI/
+    Systems/
+  Scenes/
+  Prefabs/
+  Resources/
 ```
 
----
-
-## 🎮 Puanlama Sistemi
-
-| Eylem | Puan |
-|-------|------|
-| 1 satır temizleme | 10 puan |
-| 2 satır aynı anda | 30 puan (1.5x çarpan) |
-| 3 satır aynı anda | 60 puan (2x çarpan) |
-| Kombo bonusu | Her ardışık temizlemede +0.5x |
-
----
-
-## 🚀 Kurulum
+## Kurulum
 
 ### Gereksinimler
 
-- Unity 6 (6000.x)
-- New Input System Package
+- Unity 6
+- New Input System package
 - TextMeshPro
 
-### Başlangıç
+### How to Open the Project
 
-1. Projeyi Unity Hub'dan açın
-2. `Assets/Scenes/GameScene` sahnesini açın
-3. Play tuşuna basın!
+1. Unity Hub ac
+2. Su klasoru sec:
 
-### Hızlı Kurulum (Editor Menüsü)
-
-```
-Blok Dünyası → Setup Game Scene
+```text
+d:\Unity_Projeler\BlokDunyasi\BlokDunyasi
 ```
 
-Bu menü otomatik olarak gerekli GameObject'leri oluşturur.
+3. Acilis sonrasi `Build Settings` veya `ProjectSettings/EditorBuildSettings.asset` kaynagini dogrula
+4. Normal giris akisi icin `Assets/Scenes/MainMenu.unity` sahnesini ac
 
----
+## Build Scenes
 
-## 📱 Platform Desteği
+Production build scene listesi:
 
-- ✅ Windows / macOS / Linux
-- ✅ Android
-- ✅ iOS
-- ✅ WebGL
+1. `Assets/Scenes/MainMenu.unity`
+2. `Assets/Scenes/OyunEkrani.unity`
+3. `Assets/Scenes/Scores.unity`
 
----
+Not:
+- Dosya sisteminde sahne adi Turkce karakter ile `OyunEkrani` yerine `OyunEkranı.unity` olarak durur.
+- `EditorBuildSettings.asset` icinde de bu sahne production build listesinde yer alir.
 
-## 🎨 Özelleştirme
+## Release Source of Truth
 
-### Sprite'ları Değiştirme
+- Aktif Unity proje koku: `BlokDunyasi/BlokDunyasi`
+- Build settings kaynagi: `BlokDunyasi/ProjectSettings/EditorBuildSettings.asset`
+- Aktif sahne klasoru: `BlokDunyasi/Assets/Scenes`
+- Aktif script agaci: `BlokDunyasi/Assets/Scripts`
 
-1. `Assets/BlockSpriteConfig` dosyasını seçin
-2. Inspector'da sprite'ları sürükleyip bırakın
-3. Oyunu çalıştırın
+## Repo Hygiene
 
-### Izgara Boyutunu Değiştirme
+- Generated output ve local tooling policy icin: `Docs/RepoHygienePolicy.md`
+- Test veya build sonrasinda `git status --short` kontrol edilmelidir.
+- `Library`, `Temp`, `Logs`, `UserSettings`, `bin`, `obj`, `TestResults`, local `.apk/.aab` ve backup/debug klasorleri source olarak commitlenmemelidir.
 
-`GameBootstrap` bileşeninde `Board Size` değerini ayarlayın (8 veya 10 önerilir).
+## Release Logging
 
----
+- Release log policy ve build-type log standardi icin: `Docs/ReleaseLoggingPolicy.md`
+- Runtime info/verbose loglarin source-of-truth entry point'i `Assets/Scripts/Core/Common/GameLogger.cs` olarak kabul edilir.
+- Store build'e giderken per-frame, per-drag, layout refresh ve gameplay spam loglari kapali olmalidir.
 
-## 👨‍💻 Geliştirici Notları
+## Bootstrap Ownership
 
-- **Anchor Sistemi**: Her blok (0,0) hücresini merkez olarak kullanır
-- **Preview Sistemi**: Geçerli yerleşim yeşil, geçersiz kırmızı gösterilir
-- **Event-Driven**: `OnBlocksChanged`, `OnBoardChanged`, `OnScoreChanged` eventleri
+Projede iki ayri `GameBootstrap` sinifi vardir ve bunlar ayni sorumlulugu tasimaz:
 
----
+1. Aktif gameplay bootstrap
+   - Dosya: `Assets/Scripts/UnityAdapter/Boot/GameBootstrap.cs`
+   - Namespace: `BlockPuzzle.UnityAdapter.Boot`
+   - Sahne: `Assets/Scenes/OyunEkranı.unity`
+   - Rol: production gameplay composition root
 
-*Blok Dünyası - Strateji ve Bulmaca Bir Arada!* 🧩✨
+2. App-level runtime bootstrap
+   - Dosya: `Assets/Scripts/Systems/GameBootstrap.cs`
+   - Namespace: global namespace
+   - Sahneye serialize edilmis gameplay bootstrap degildir
+   - Rol: `AppInitializer` startup yolunu `BeforeSceneLoad` asamasinda tetiklemek
+
+Production gameplay ownership her zaman `BlockPuzzle.UnityAdapter.Boot.GameBootstrap` sinifindadir.
+
+## Adapter Dependency Graph
+
+- Kritik Unity Adapter dependency contract'i icin: `Docs/AdapterDependencyGraph.md`
+- Production path'te `GameBootstrap`, `NewDragSystem`, `NewBlockTray`, `SimpleGridView`, `HudView`, `GameOverView` ve `ResponsiveGameLayout` dependency'leri inspector/serialized reference ile acik baglanmalidir.
+- `FindFirstObjectByType`, `Camera.main` ve benzeri runtime lookup'lar yalniz fallback olarak kabul edilir; kalici scene wiring yerine gecmemelidir.
+
+## Safe Area Contract
+
+- Build sahneleri icin safe-area owner map ve riskler: `Docs/SafeAreaContract.md`
+- Release oncesi scene/device checklist: `Docs/SafeAreaValidationChecklist.md`
+- MainMenu, OyunEkrani ve Scores sahneleri safe-area acisindan bu checklist'e gore dogrulanmadan store build alinmamalidir.
+
+## Gameplay Layout Authority
+
+- Oyun ekrani layout ownership matrisi: `Docs/GameplayLayoutAuthority.md`
+- Gameplay screen validation checklist: `Docs/GameplayLayoutValidationChecklist.md`
+- `ScreenLayoutManager`, `SimpleGridView`, `NewBlockTray`, `HudView` ve `GameOverView` rolleri bu dokumana gore degerlendirilmeden gameplay layout refactor'u yapilmamalidir.
+
+## Verification Checklist
+
+- Unity Hub dogru klasoru aciyor mu: `BlokDunyasi/BlokDunyasi`
+- `ProjectSettings/EditorBuildSettings.asset` icinde 3 production sahnesi var mi
+- `Assets/Scenes` altinda `MainMenu`, `OyunEkranı`, `Scores` mevcut mu
+- `Assets/Scripts` altinda `Core`, `UnityAdapter`, `UI`, `Systems` yapisi mevcut mu
+- Repository dis koku yanlislikla acilmadi mi
+- Gameplay bootstrap ownership `UnityAdapter/Boot/GameBootstrap.cs` olarak biliniyor mu
+
+## Developer Notes
+
+- Anchor sistemi her blokta `(0,0)` hucreyi merkez kabul eder
+- Preview sistemi gecerli ve gecersiz yerlestirmeyi ayri gosterir
+- Olay bazli akis `OnBlocksChanged`, `OnBoardChanged`, `OnScoreChanged` eventleri uzerinden ilerler
+- Project root warning: Yalniz `BlokDunyasi/BlokDunyasi` Unity projesi uzerinde calisin

@@ -1,0 +1,173 @@
+/*
+==============================================================================
+DİL SISTEMI KULLANIM KILAVUZU (Language System Usage Guide)
+==============================================================================
+
+Bu sistemin 4 ana bileşeni vardır:
+
+1. LanguageManager - Merkez yöneticisi (Singleton)
+   - Dil değişimini kontrol eder
+   - Tüm UI bileşenlerine bildirim gönderir
+   - PlayerPrefs'e dil seçimini kaydeder
+
+2. LocalizedText - Metin lokalizasyonu
+   - TextMeshProUGUI bileşenleri için
+   - Inspector'da Türkçe/İngilizce metinler ayarlayabilirsiniz
+   - Dil değişince otomatik güncellenir
+
+3. LocalizedImage - Görsel lokalizasyonu
+   - Image/Button bileşenleri için sprite'lar değiştirir
+   - Menü butonlarının görsel yazıları dilda değiştiricek
+   - Her dil için farklı sprite atayabilirsiniz
+
+4. LanguageButton - Dil seçme butonu
+   - Tıklanınca hedef dili ayarlar
+   - "Türkçe" ve "English" butonları olarak kullanın
+
+==============================================================================
+KURULUM ADIMLARI:
+==============================================================================
+
+1. SETUP'I ÇALIŞTIR:
+   Editor'da: Tools > Setup Language System
+   → LanguageManager otomatik scene'e eklenir
+
+2. DİL SEÇİM BUTONLARINI OLUŞTUR:
+   a) Türkçe butonu için: Tools > Language System > Create Turkish Text Button
+   b) English butonu için: Tools > Language System > Create English Text Button
+   
+   Ya da manuel olarak:
+   - Canvas'a Button ekle
+   - Botona "LanguageButton" component ekle
+   - Component'te:
+     * Button: Button component'i seç
+     * Target Language: "Turkish" veya "English" seç
+
+3. MEVCUT METIN ELEMANLARINI LOKALIZE ET:
+   
+   TextMeshProUGUI bileşenine sahip her element için:
+   a) GameObject seç
+   b) "Add Component" > "LocalizedText" ekle
+   c) Inspector'da:
+      - Turkish Text: Türkçe metni yaz
+      - English Text: İngilizce metni yaz
+
+4. BUTON GÖRSELLERİNİ LOKALIZE ET:
+   
+   Image/Button görselleri değiştirilecekse:
+   a) GameObject seç
+   b) "Add Component" > "LocalizedImage" ekle
+   c) Inspector'da:
+      - Turkish Sprite: Türkçe versiyonunu seç
+      - English Sprite: İngilizce versiyonunu seç
+      - Apply Native Size: Gerekirse işaretle
+
+==============================================================================
+ÖRNEK SENARYO: MENÜ BUTONLARı
+==============================================================================
+
+Diyelim menüde şu butonlarınız var:
+- "Başla Oyunu" / "Start Game"
+- "Ayarlar" / "Settings" (görselle)
+- "Puan Tablosu" / "Leaderboard" (görselle)
+
+ADIM 1: LocalizedText ekle
+--------
+"Başla Oyunu" butonun text child'ına:
+- Turkish Text: "Başla Oyunu"
+- English Text: "Start Game"
+
+ADIM 2: LocalizedImage ekle
+--------
+"Ayarlar" butonun Image bileşenine:
+- Turkish Sprite: (ayarlar-tr sprite)
+- English Sprite: (settings sprite)
+
+ADIM 3: Dil seçim butonları
+--------
+"Türkçe" ve "English" butonlarını oluştur
+(Tools menüsünden veya manual)
+
+Sonuç: Kullanıcı dil seçince tüm textler ve görseller değişir! ✓
+
+==============================================================================
+PROGRAMATIK KULLANIM:
+==============================================================================
+
+C# Kodunda dil ayarlamak için:
+
+// Türkçe'ye değiştir
+LanguageManager.Instance.CurrentLanguage = LanguageManager.Language.Turkish;
+
+// İngilizce'ye değiştir
+LanguageManager.Instance.CurrentLanguage = LanguageManager.Language.English;
+
+// Güncel dili oku
+var currentLang = LanguageManager.Instance.CurrentLanguage;
+var langName = LanguageManager.Instance.CurrentLanguageName;
+
+==============================================================================
+DİL DEĞIŞIKLIĞNÜ DINLEME (Kustom bileşen yazarken):
+==============================================================================
+
+public class MyCustomUI : MonoBehaviour, ILanguageListener
+{
+    private void OnEnable()
+    {
+        LanguageManager.Instance.Subscribe(this);
+    }
+
+    private void OnDisable()
+    {
+        LanguageManager.Instance.Unsubscribe(this);
+    }
+
+    public void OnLanguageChanged(LanguageManager.Language newLanguage)
+    {
+        // Dil değiştiğinde yapılacak işlemler
+        if (newLanguage == LanguageManager.Language.Turkish)
+        {
+            Debug.Log("Türkçeye çevrildim!");
+        }
+        else
+        {
+            Debug.Log("İngilizceye çevrildim!");
+        }
+    }
+}
+
+==============================================================================
+İPUCLARI:
+==============================================================================
+
+✓ LanguageManager otomatik DontDestroyOnLoad yapılır
+✓ Dil seçimi PlayerPrefs'e kaydedilir
+✓ Uygulama açıldığında kaydedilmiş dil otomatik yüklenir
+✓ LocalizedText ve LocalizedImage auto-subscribe olurlar
+✓ Sadece kullanılan dile ait olan string/sprite'ları ayarla
+✓ Debug logs ile sistem state'ini kontrol edebilirsin
+
+==============================================================================
+HATA GIDERME:
+==============================================================================
+
+❌ Metin değişmiyor:
+   → LocalizedText component'in textComponent field'ı boş mu?
+   → OnEnable() çağırılmış mı?
+
+❌ Görsel değişmiyor:
+   → LocalizedImage component'in imageComponent field'ı boş mu?
+   → Sprite'lar null mu?
+   → Apply Native Size işaretli mi?
+
+❌ Buton tıklanmıyor:
+   → LanguageButton component'te Button referansı atanmış mı?
+   → Target Language doğru mu?
+
+❌ Dil seçimi kaydedilmiyor:
+   → PlayerPrefs.HasKey("SelectedLanguage") kontrol et
+   → Scene değişiminde persist olması için LanguageManager'ın
+     DontDestroyOnLoad yapıldığından emin ol
+
+==============================================================================
+*/

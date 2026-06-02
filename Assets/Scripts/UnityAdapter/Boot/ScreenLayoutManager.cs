@@ -6,6 +6,11 @@ using UnityEngine.UI;
 
 namespace BlockPuzzle.UnityAdapter.Boot
 {
+    /// <summary>
+    /// Current runtime gameplay layout coordinator used by GameBootstrap.
+    /// Owns camera sizing/positioning and triggers downstream tray relayout.
+    /// It should not directly own tray slot math or HUD-local anchoring.
+    /// </summary>
     internal sealed class ScreenLayoutManager
     {
         private int _lastScreenWidth;
@@ -53,15 +58,32 @@ namespace BlockPuzzle.UnityAdapter.Boot
 
             float safeAspect = GetSafeAspectRatio();
             float boardWorldWidth = EstimateBoardWorldWidth(fallbackBoardWidth, currentGameState);
+            float boardWorldHeight = EstimateBoardWorldHeight(fallbackBoardWidth, currentGameState);
 
+            // Calculate adaptive sizing
+            // Horizontal: Board width + padding
             float requiredHalfWidth = (boardWorldWidth * 0.5f) + cameraHorizontalPadding;
-            float sizeForWidth = requiredHalfWidth / Mathf.Max(0.01f, safeAspect);
-            float targetSize = Mathf.Max(baseCameraSize, sizeForWidth, minAdaptiveCameraSize);
+            float sizeByWidth = requiredHalfWidth / Mathf.Max(0.01f, safeAspect);
+
+            // Vertical: We need space for Grid (boardWorldHeight) + Header UI (approx 2.5) + Tray (approx 3.5)
+            // Header is at the top, Tray is at the bottom.
+            float headerSpace = 2.8f;
+            float traySpace = 4.2f;
+            float middleGap = 0.8f;
+            float footerSpace = 0.8f;
+            
+            float totalVerticalNeeded = boardWorldHeight + headerSpace + traySpace + middleGap + footerSpace;
+            float sizeByHeight = totalVerticalNeeded * 0.5f;
+
+            float targetSize = Mathf.Max(baseCameraSize, sizeByWidth, sizeByHeight);
             targetSize = Mathf.Clamp(targetSize, minAdaptiveCameraSize, maxAdaptiveCameraSize);
 
-            camera.transform.position = cameraPosition;
+            float contentTop = (boardWorldHeight * 0.5f) + headerSpace;
+            float contentBottom = -(boardWorldHeight * 0.5f) - middleGap - traySpace - footerSpace;
+            float centerPointY = (contentTop + contentBottom) * 0.5f;
+
+            camera.transform.position = new Vector3(cameraPosition.x, centerPointY, cameraPosition.z);
             camera.transform.rotation = Quaternion.identity;
-            camera.orthographic = true;
             camera.orthographicSize = targetSize;
 
             ConfigureCanvasScalers(canvasReferenceResolution, canvasMatchWidthOrHeight);
@@ -93,6 +115,19 @@ namespace BlockPuzzle.UnityAdapter.Boot
 
             float step = cellSizeWorld + spacingWorld;
             return ((logicalBoardWidth - 1) * step) + cellSizeWorld;
+        }
+
+        private static float EstimateBoardWorldHeight(int fallbackBoardHeight, GameState currentGameState)
+        {
+            int logicalBoardHeight = currentGameState?.Board?.Height ?? fallbackBoardHeight;
+            logicalBoardHeight = Mathf.Max(1, logicalBoardHeight);
+
+            var gridView = Object.FindFirstObjectByType<SimpleGridView>();
+            float cellSizeWorld = gridView != null ? gridView.CellSize : 0.7f;
+            float spacingWorld = gridView != null ? gridView.CellSpacing : 0.05f;
+
+            float step = cellSizeWorld + spacingWorld;
+            return ((logicalBoardHeight - 1) * step) + cellSizeWorld;
         }
 
         private static float GetSafeAspectRatio()

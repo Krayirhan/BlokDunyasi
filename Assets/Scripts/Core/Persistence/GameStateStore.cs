@@ -35,6 +35,7 @@ namespace BlockPuzzle.Core.Persistence
         {
             if (gameData == null) return;
 
+            gameData.MigrateToCurrentInPlace();
             var json = _serializer.Serialize(gameData);
             _storage.SaveString(GetKey(key), json);
             _storage.Save();
@@ -56,7 +57,8 @@ namespace BlockPuzzle.Core.Persistence
 
             try
             {
-                return _serializer.Deserialize<GameData>(json);
+                var data = _serializer.Deserialize<GameData>(json);
+                return data == null ? null : MigrateLoadedData(data);
             }
             catch
             {
@@ -78,6 +80,12 @@ namespace BlockPuzzle.Core.Persistence
         private static string GetKey(string key)
         {
             return string.IsNullOrEmpty(key) ? GAME_STATE_KEY : key;
+        }
+
+        private static GameData MigrateLoadedData(GameData data)
+        {
+            data.MigrateToCurrentInPlace();
+            return data;
         }
     }
 }

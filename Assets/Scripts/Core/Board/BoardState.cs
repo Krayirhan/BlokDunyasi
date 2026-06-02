@@ -6,7 +6,8 @@ namespace BlockPuzzle.Core.Board
     /// Represents the current state of the game board.
     /// Uses 1D array storage for performance with row/column count tracking.
     /// 
-    /// Grid origin: bottom-left (0,0), x increases right, y increases up.
+    /// Grid origin: top-left (0,0), x increases right, y increases down.
+    /// (Consistent with UnityAdapter visual system)
     /// 
     /// Invariants:
     /// - _rowCounts[y] == number of filled cells in row y
@@ -186,7 +187,7 @@ namespace BlockPuzzle.Core.Board
         
         /// <summary>
         /// Converts 2D coordinates to 1D array index.
-        /// Origin: bottom-left (0,0), x right, y up.
+        /// Origin: top-left (0,0), x right, y down.
         /// </summary>
         /// <param name="x">X coordinate</param>
         /// <param name="y">Y coordinate</param>

@@ -5,12 +5,16 @@ namespace BlockPuzzle.Core.Rules
     /// Tracks the current combo state for scoring multipliers.
     /// 
     /// Rules:
-    /// - Combo resets when no lines are cleared in a move
     /// - Combo increases when lines are cleared
+    /// - One setup move without a clear can be buffered before the combo breaks
+    /// - A second consecutive non-clear move resets the combo
     /// - Multiplier is based on combo streak
     /// </summary>
     public class ComboState
     {
+        private const int DefaultGraceMovesAfterClear = 1;
+        private const int MaxComboStreak = 50;
+
         /// <summary>
         /// Current combo streak (number of consecutive moves with line clears).
         /// </summary>
@@ -25,6 +29,11 @@ namespace BlockPuzzle.Core.Rules
         /// Current combo multiplier based on streak.
         /// </summary>
         public float Multiplier { get; private set; }
+
+        /// <summary>
+        /// Remaining non-clear setup moves that can be made before the combo breaks.
+        /// </summary>
+        public int GraceMovesRemaining { get; private set; }
         
         /// <summary>
         /// Creates a new combo state with no active combo.
@@ -42,14 +51,11 @@ namespace BlockPuzzle.Core.Rules
         {
             if (linesClearedThisMove == 0)
             {
-                // No lines cleared - reset combo
-                Reset();
+                ConsumeNonClearMove();
             }
             else
             {
-                // Lines cleared - increment combo
-                Streak++;
-                Multiplier = CalculateMultiplier(Streak);
+                IncrementCombo();
             }
         }
         
@@ -59,8 +65,31 @@ namespace BlockPuzzle.Core.Rules
         /// <returns>This ComboState after incrementing</returns>
         public ComboState IncrementCombo()
         {
-            Streak++;
+            Streak = System.Math.Min(MaxComboStreak, Streak + 1);
             Multiplier = CalculateMultiplier(Streak);
+            GraceMovesRemaining = DefaultGraceMovesAfterClear;
+            return this;
+        }
+
+        /// <summary>
+        /// Applies a non-clear move to the combo chain.
+        /// Allows one buffered setup move before fully resetting the streak.
+        /// </summary>
+        public ComboState ConsumeNonClearMove()
+        {
+            if (Streak <= 0)
+            {
+                Reset();
+                return this;
+            }
+
+            if (GraceMovesRemaining > 0)
+            {
+                GraceMovesRemaining--;
+                return this;
+            }
+
+            Reset();
             return this;
         }
         
@@ -81,6 +110,7 @@ namespace BlockPuzzle.Core.Rules
         {
             Streak = 0;
             Multiplier = 1.0f;
+            GraceMovesRemaining = 0;
         }
 
         /// <summary>
@@ -90,6 +120,17 @@ namespace BlockPuzzle.Core.Rules
         {
             Streak = streak < 0 ? 0 : streak;
             Multiplier = CalculateMultiplier(Streak);
+            GraceMovesRemaining = Streak > 0 ? DefaultGraceMovesAfterClear : 0;
+        }
+
+        /// <summary>
+        /// Restores both streak and buffered grace moves directly (for persistence).
+        /// </summary>
+        public void SetState(int streak, int graceMovesRemaining)
+        {
+            Streak = streak < 0 ? 0 : streak;
+            Multiplier = CalculateMultiplier(Streak);
+            GraceMovesRemaining = Streak > 0 ? System.Math.Max(0, graceMovesRemaining) : 0;
         }
         
         /// <summary>
@@ -101,25 +142,28 @@ namespace BlockPuzzle.Core.Rules
             return new ComboState
             {
                 Streak = this.Streak,
-                Multiplier = this.Multiplier
+                Multiplier = this.Multiplier,
+                GraceMovesRemaining = this.GraceMovesRemaining
             };
         }
         
         /// <summary>
         /// Calculates the multiplier for a given combo streak.
-        /// Formula: 1.0 + (streak - 1) * 0.1 (10% increase per combo level)
+        /// Multiplier source is the active <see cref="ScoringRules.DefaultConfig"/> combo curve.
         /// </summary>
         /// <param name="streak">Combo streak level</param>
         /// <returns>Score multiplier</returns>
         private static float CalculateMultiplier(int streak)
         {
-            if (streak <= 0) return 1.0f;
-            return 1.0f + (streak - 1) * 0.1f;
+            if (streak <= 0)
+                return 1.0f;
+
+            return ScoringRules.DefaultConfig.EvaluateComboMultiplier(streak);
         }
         
         public override string ToString()
         {
-            return $"Combo: {Streak} (x{Multiplier:F1})";
+            return $"Combo: {Streak} (x{Multiplier:F1}, grace {GraceMovesRemaining})";
         }
     }
 }

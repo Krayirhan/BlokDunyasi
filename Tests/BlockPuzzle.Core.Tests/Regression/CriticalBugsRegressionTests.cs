@@ -1,3 +1,4 @@
+using System.Linq;
 using BlockPuzzle.Core.Board;
 using BlockPuzzle.Core.Common;
 using BlockPuzzle.Core.Engine;
@@ -60,9 +61,83 @@ namespace BlockPuzzle.Core.Tests.Regression
             var move = engine.AttemptMove(0, new Int2(3, 0));
 
             Assert.IsTrue(move.Success);
-            Assert.AreEqual(10, move.ScoreDelta);
+            Assert.AreEqual(20, move.ScoreDelta);
             Assert.AreEqual(int.MaxValue, move.TotalScore);
             Assert.AreEqual(int.MaxValue, engine.CurrentState.Score);
+        }
+
+        [Test]
+        public void Bug_P0_003_ContinueAfterGameOver_ShouldRestoreThreePlaceableBlocks()
+        {
+            var engine = new GameEngine(new SeededRng(9003), boardWidth: 4, boardHeight: 4);
+
+            var state = new GameState(4, 4);
+            var cells = new CellState[16];
+            for (int i = 0; i < cells.Length; i++)
+                cells[i] = CellState.Filled(99, 1);
+
+            cells[15] = CellState.Empty;
+            state.Board.SetCells(cells);
+
+            var blockedSet = new ActiveBlocks();
+            blockedSet.SetBlockAt(0, new ShapeId(8)); // Square2x2
+            blockedSet.SetBlockAt(1, new ShapeId(8));
+            blockedSet.SetBlockAt(2, new ShapeId(8));
+
+            state = state
+                .WithActiveBlocks(blockedSet)
+                .WithGameOver();
+
+            engine.LoadGame(state);
+
+            bool continued = engine.TryContinueAfterGameOver();
+
+            Assert.IsTrue(continued);
+            Assert.IsFalse(engine.CurrentState.IsGameOver);
+            Assert.IsTrue(engine.CurrentState.ActiveBlocks.IsFull);
+
+            for (int slot = 0; slot < 3; slot++)
+            {
+                Assert.IsTrue(engine.CurrentState.ActiveBlocks.HasBlockAt(slot), $"Slot {slot} should be filled.");
+
+                var shapeId = engine.CurrentState.ActiveBlocks.GetShapeId(slot);
+                Assert.IsTrue(ShapeLibrary.TryGetShape(shapeId, out var shape), $"Slot {slot} shape should exist in ShapeLibrary.");
+                Assert.IsTrue(PlacementSearch.HasAnyValidPlacement(engine.CurrentState.Board, shape), $"Slot {slot} should be placeable after continue.");
+            }
+        }
+
+        [Test]
+        public void Bug_P0_004_ContinueAfterGameOver_ShouldPreferVariedBlocks_WhenBoardAllowsVariety()
+        {
+            var engine = new GameEngine(new SeededRng(9004), boardWidth: 8, boardHeight: 8);
+
+            var state = new GameState(8, 8);
+            var blockedSet = new ActiveBlocks();
+            blockedSet.SetBlockAt(0, ShapeLibrary.Single);
+            blockedSet.SetBlockAt(1, ShapeLibrary.Single);
+            blockedSet.SetBlockAt(2, ShapeLibrary.Single);
+
+            state = state
+                .WithActiveBlocks(blockedSet)
+                .WithGameOver();
+
+            engine.LoadGame(state);
+
+            bool continued = engine.TryContinueAfterGameOver();
+
+            Assert.IsTrue(continued);
+            Assert.IsFalse(engine.CurrentState.IsGameOver);
+            Assert.IsTrue(engine.CurrentState.ActiveBlocks.IsFull);
+
+            var shapeIds = engine.CurrentState.ActiveBlocks.GetShapeIds();
+            Assert.GreaterOrEqual(shapeIds.Distinct().Count(), 2, "Continue should not collapse to three identical blocks on an open board.");
+
+            for (int slot = 0; slot < 3; slot++)
+            {
+                var shapeId = engine.CurrentState.ActiveBlocks.GetShapeId(slot);
+                Assert.IsTrue(ShapeLibrary.TryGetShape(shapeId, out var shape), $"Slot {slot} shape should exist in ShapeLibrary.");
+                Assert.IsTrue(PlacementSearch.HasAnyValidPlacement(engine.CurrentState.Board, shape), $"Slot {slot} should be placeable after continue.");
+            }
         }
     }
 }

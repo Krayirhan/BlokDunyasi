@@ -46,27 +46,22 @@ namespace BlockPuzzle.Core.Board
             if (offsets.Count == 0)
                 throw new ArgumentException("Offsets cannot be empty", nameof(offsets));
 
-            // Check each target position
+            bool hasCollision = false;
+
             for (int i = 0; i < offsets.Count; i++)
             {
                 Int2 offset = offsets[i];
                 int targetX = ax + offset.X;
                 int targetY = ay + offset.Y;
-                
-                // Check bounds first
+
                 if (!board.IsInBounds(targetX, targetY))
-                {
                     return PlacementResult.OutOfBounds;
-                }
-                
-                // Check collision
+
                 if (!board.IsEmpty(targetX, targetY))
-                {
-                    return PlacementResult.Collision;
-                }
+                    hasCollision = true;
             }
-            
-            return PlacementResult.Success;
+
+            return hasCollision ? PlacementResult.Collision : PlacementResult.Success;
         }
         
         /// <summary>

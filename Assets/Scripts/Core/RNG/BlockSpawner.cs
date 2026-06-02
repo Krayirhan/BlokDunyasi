@@ -1,4 +1,5 @@
 // File: Core/RNG/BlockSpawner.cs
+using System;
 using System.Collections.Generic;
 using BlockPuzzle.Core.Shapes;
 using BlockPuzzle.Core.Board;
@@ -11,9 +12,20 @@ namespace BlockPuzzle.Core.RNG
     /// </summary>
     public class BlockSpawner
     {
+        private const int RecentHistorySize = 9;
+        private const int MaxSameShapePerSet = 2;
+        private const int EasyShapeMaxCellCount = 2;
+        private const int MaxSetsWithoutEasyShape = 2;
+        private const int DefaultMiniBagSize = 9;
+        private const int MinMiniBagSize = 6;
+        private const int StruggleSafeShapeMinCount = 2;
+
         private readonly SeededRng _rng;
         private readonly DifficultyModel _difficultyModel;
         private readonly WeightedPicker<ShapeId> _shapePicker;
+        private readonly Queue<ShapeId> _recentSpawnHistory;
+        private readonly Queue<ShapeId> _miniBag;
+        private int _setsWithoutEasyShape;
         
         /// <summary>
         /// Number of blocks to spawn per set (typically 3 for Blok Dünyası).
@@ -29,17 +41,39 @@ namespace BlockPuzzle.Core.RNG
         /// Whether to apply safety checks to ensure at least one block is placeable.
         /// </summary>
         public bool UseSafetyChecks { get; set; } = true;
+
+        /// <summary>
+        /// Enables a second-pass board health evaluation so sets are not only placeable,
+        /// but also leave a reasonable continuation path.
+        /// </summary>
+        public bool UseFutureSolvabilityChecks { get; set; } = true;
+
+        /// <summary>
+        /// Enables mini-bag based distribution for smoother and fairer block cadence.
+        /// </summary>
+        public bool UseMiniBag { get; set; } = true;
+
+        /// <summary>
+        /// Target size of the mini-bag pool.
+        /// </summary>
+        public int MiniBagSize { get; set; } = DefaultMiniBagSize;
         
         /// <summary>
         /// Current difficulty model for adaptive spawning.
         /// </summary>
         public DifficultyModel DifficultyModel => _difficultyModel;
+
+        public float MinFutureOpenAreaScore { get; set; } = 0.22f;
+        public int MinLargestEmptyRectangleArea { get; set; } = 6;
         
         public BlockSpawner(SeededRng rng, DifficultyModel difficultyModel = null)
         {
             _rng = rng;
             _difficultyModel = difficultyModel ?? new DifficultyModel();
             _shapePicker = new WeightedPicker<ShapeId>();
+            _recentSpawnHistory = new Queue<ShapeId>(RecentHistorySize);
+            _miniBag = new Queue<ShapeId>(DefaultMiniBagSize);
+            _setsWithoutEasyShape = 0;
             
             InitializeShapeWeights();
         }
@@ -55,20 +89,23 @@ namespace BlockPuzzle.Core.RNG
             
             for (int attempt = 0; attempt < MaxGenerationAttempts; attempt++)
             {
-                var blockSet = GenerateBlockSet();
+                var blockSet = GenerateBlockSet(boardState);
                 
                 // CRITICAL FIX: Validate all ShapeIds exist in ShapeLibrary before returning
                 blockSet = ValidateAndFixBlockSet(blockSet);
                 
-                if (!UseSafetyChecks || IsBlockSetSafe(blockSet, boardState))
+                if (!UseSafetyChecks || IsBlockSetHealthy(blockSet, boardState))
                 {
+                    TrackSpawnHistory(blockSet);
                     return blockSet;
                 }
             }
             
             // Fallback: generate a guaranteed safe set
             var safeSet = GenerateSafeBlockSet(boardState);
-            return ValidateAndFixBlockSet(safeSet);
+            safeSet = ValidateAndFixBlockSet(safeSet);
+            TrackSpawnHistory(safeSet);
+            return safeSet;
         }
         
         /// <summary>
@@ -143,6 +180,65 @@ namespace BlockPuzzle.Core.RNG
             
             return false;
         }
+
+        private bool IsBlockSetHealthy(ShapeId[] blockSet, BoardState boardState)
+        {
+            if (!IsBlockSetSafe(blockSet, boardState))
+                return false;
+
+            if (!UseFutureSolvabilityChecks || boardState == null)
+                return true;
+
+            var shapeDefinitions = ResolveShapes(blockSet);
+            if (shapeDefinitions.Count == 0)
+                return true;
+
+            var baseline = BoardHeuristics.Evaluate(boardState, shapeDefinitions);
+            float bestScore = float.MinValue;
+            BoardHeuristics.Snapshot bestSnapshot = default;
+            bool foundPreview = false;
+
+            for (int i = 0; i < shapeDefinitions.Count; i++)
+            {
+                var shape = shapeDefinitions[i];
+                if (shape == null)
+                    continue;
+
+                var placements = PlacementSearch.FindValidPlacements(boardState, shape);
+                for (int placementIndex = 0; placementIndex < placements.Length; placementIndex++)
+                {
+                    var preview = BoardHeuristics.EvaluatePlacement(boardState, shape, placements[placementIndex], shapeDefinitions);
+                    if (!preview.IsValid)
+                        continue;
+
+                    if (preview.CompositeScore > bestScore)
+                    {
+                        bestScore = preview.CompositeScore;
+                        bestSnapshot = preview.Snapshot;
+                        foundPreview = true;
+                    }
+                }
+            }
+
+            if (!foundPreview)
+                return false;
+
+            if (bestSnapshot.FutureOpenAreaScore < MinFutureOpenAreaScore)
+                return false;
+
+            if (bestSnapshot.LargestEmptyRectangleArea < MinLargestEmptyRectangleArea && bestSnapshot.EmptyCellCount < 18)
+                return false;
+
+            if (baseline.AvailableThreeByThreeCount > 0 &&
+                bestSnapshot.AvailableThreeByThreeCount <= 0 &&
+                !ContainsEasyShape(blockSet) &&
+                !_difficultyModel.IsPlayerStruggling)
+            {
+                return false;
+            }
+
+            return true;
+        }
         
         /// <summary>
         /// Resets spawner state (useful for new games).
@@ -155,6 +251,9 @@ namespace BlockPuzzle.Core.RNG
                 
             _difficultyModel.Reset();
             InitializeShapeWeights();
+            _recentSpawnHistory.Clear();
+            _miniBag.Clear();
+            _setsWithoutEasyShape = 0;
         }
         
         /// <summary>
@@ -220,23 +319,297 @@ namespace BlockPuzzle.Core.RNG
             return 1f; // Default weight
         }
         
-        private ShapeId[] GenerateBlockSet()
+        private ShapeId[] GenerateBlockSet(BoardState boardState)
         {
             var blockSet = new ShapeId[BlocksPerSet];
+            var occurrencesInSet = new Dictionary<ShapeId, int>();
+            EnsureMiniBagFilled();
             
             for (int i = 0; i < BlocksPerSet; i++)
             {
-                blockSet[i] = _shapePicker.Pick(_rng);
+                var selectedShape = UseMiniBag
+                    ? TakeShapeFromMiniBag(occurrencesInSet)
+                    : PickShapeWithFairness(occurrencesInSet);
+                blockSet[i] = selectedShape;
+
+                if (occurrencesInSet.TryGetValue(selectedShape, out int count))
+                    occurrencesInSet[selectedShape] = count + 1;
+                else
+                    occurrencesInSet[selectedShape] = 1;
             }
+
+            EnsureEasyShapePresence(blockSet, boardState);
             
             // Apply extra challenge if suggested by difficulty model
             if (_difficultyModel.ShouldAddExtraChallenge() && BlocksPerSet > 1)
             {
-                // Replace the last block with a more challenging one
-                blockSet[BlocksPerSet - 1] = GetChallengeShape();
+                // Soft-challenge: chance-based replacement only when set already has some safety.
+                // This avoids deterministic difficulty spikes for high-performing players.
+                bool setContainsEasyShape = ContainsEasyShape(blockSet);
+                float challengeChance = setContainsEasyShape ? 0.35f : 0.18f;
+                if (_rng.NextBool(challengeChance))
+                {
+                    // Replace the last block with a more challenging one
+                    blockSet[BlocksPerSet - 1] = GetChallengeShape();
+                }
             }
             
             return blockSet;
+        }
+
+        private ShapeId PickShapeWithFairness(Dictionary<ShapeId, int> occurrencesInSet)
+        {
+            var weightedCandidates = _shapePicker.GetItems();
+            if (weightedCandidates == null || weightedCandidates.Count == 0)
+                return ShapeLibrary.Single;
+
+            var fairPicker = new WeightedPicker<ShapeId>();
+            ShapeId fallbackShape = weightedCandidates[0].Value;
+
+            foreach (var candidate in weightedCandidates)
+            {
+                int inSetCount = 0;
+                if (occurrencesInSet != null)
+                    occurrencesInSet.TryGetValue(candidate.Value, out inSetCount);
+
+                if (inSetCount >= MaxSameShapePerSet)
+                    continue;
+
+                int recentCount = GetRecentOccurrenceCount(candidate.Value);
+                float recencyPenalty = 1f / (1f + (recentCount * 0.6f) + (inSetCount * 0.9f));
+
+                // Extra penalty for immediate repeats from the previous spawn.
+                if (_recentSpawnHistory.Count > 0)
+                {
+                    var recentArray = _recentSpawnHistory.ToArray();
+                    if (recentArray[recentArray.Length - 1].Equals(candidate.Value))
+                        recencyPenalty *= 0.55f;
+                }
+
+                float adjustedWeight = Math.Max(0.15f, candidate.Weight * recencyPenalty);
+                if (_difficultyModel.IsPlayerStruggling && ShapeLibrary.TryGetShape(candidate.Value, out var shape))
+                {
+                    bool easyShape = shape.Offsets.Length <= EasyShapeMaxCellCount;
+                    if (easyShape)
+                        adjustedWeight *= _difficultyModel.GetFairnessBoost();
+                }
+                fairPicker.Add(candidate.Value, adjustedWeight);
+                fallbackShape = candidate.Value;
+            }
+
+            return fairPicker.IsEmpty ? fallbackShape : fairPicker.Pick(_rng);
+        }
+
+        private void EnsureMiniBagFilled()
+        {
+            if (!UseMiniBag)
+                return;
+
+            int targetSize = MiniBagSize < MinMiniBagSize ? MinMiniBagSize : MiniBagSize;
+            targetSize = Math.Max(targetSize, BlocksPerSet * 2);
+
+            while (_miniBag.Count < targetSize)
+            {
+                _miniBag.Enqueue(PickMiniBagShape());
+            }
+        }
+
+        private ShapeId TakeShapeFromMiniBag(Dictionary<ShapeId, int> occurrencesInSet)
+        {
+            if (_miniBag.Count == 0)
+                EnsureMiniBagFilled();
+
+            if (_miniBag.Count == 0)
+                return PickShapeWithFairness(occurrencesInSet);
+
+            int scans = _miniBag.Count;
+            for (int i = 0; i < scans; i++)
+            {
+                var candidate = _miniBag.Dequeue();
+
+                int inSetCount = 0;
+                if (occurrencesInSet != null)
+                    occurrencesInSet.TryGetValue(candidate, out inSetCount);
+
+                if (inSetCount < MaxSameShapePerSet)
+                    return candidate;
+
+                _miniBag.Enqueue(candidate);
+            }
+
+            return _miniBag.Dequeue();
+        }
+
+        private ShapeId PickMiniBagShape()
+        {
+            var weightedCandidates = _shapePicker.GetItems();
+            if (weightedCandidates == null || weightedCandidates.Count == 0)
+                return ShapeLibrary.Single;
+
+            var bagPicker = new WeightedPicker<ShapeId>();
+            ShapeId fallbackShape = weightedCandidates[0].Value;
+
+            var bagCounts = new Dictionary<ShapeId, int>();
+            foreach (var shapeId in _miniBag)
+            {
+                if (bagCounts.TryGetValue(shapeId, out int count))
+                    bagCounts[shapeId] = count + 1;
+                else
+                    bagCounts[shapeId] = 1;
+            }
+
+            ShapeId lastBagShape = default;
+            bool hasLastBagShape = false;
+            if (_miniBag.Count > 0)
+            {
+                var bagSnapshot = _miniBag.ToArray();
+                lastBagShape = bagSnapshot[bagSnapshot.Length - 1];
+                hasLastBagShape = true;
+            }
+
+            foreach (var candidate in weightedCandidates)
+            {
+                int recentCount = GetRecentOccurrenceCount(candidate.Value);
+                bagCounts.TryGetValue(candidate.Value, out int bagCount);
+
+                float recencyPenalty = 1f / (1f + (recentCount * 0.45f));
+                float bagSaturationPenalty = 1f / (1f + (bagCount * 0.75f));
+                float duplicatePenalty = hasLastBagShape && lastBagShape.Equals(candidate.Value) ? 0.55f : 1f;
+
+                float adjustedWeight = candidate.Weight * recencyPenalty * bagSaturationPenalty * duplicatePenalty;
+                adjustedWeight = Math.Max(0.12f, adjustedWeight);
+
+                bagPicker.Add(candidate.Value, adjustedWeight);
+                fallbackShape = candidate.Value;
+            }
+
+            return bagPicker.IsEmpty ? fallbackShape : bagPicker.Pick(_rng);
+        }
+
+        private int GetRecentOccurrenceCount(ShapeId shapeId)
+        {
+            int count = 0;
+            foreach (var recentShape in _recentSpawnHistory)
+            {
+                if (recentShape.Equals(shapeId))
+                    count++;
+            }
+
+            return count;
+        }
+
+        private void EnsureEasyShapePresence(ShapeId[] blockSet, BoardState boardState)
+        {
+            if (blockSet == null || blockSet.Length == 0)
+                return;
+
+            int easyShapeCount = CountEasyShapes(blockSet);
+            int requiredEasyCount = _difficultyModel.IsPlayerStruggling ? StruggleSafeShapeMinCount : 1;
+            if (easyShapeCount >= requiredEasyCount)
+                return;
+
+            // Uses finalized history counter from previous sets.
+            // If too many sets in a row had no easy shapes, enforce one now.
+            if (_setsWithoutEasyShape < MaxSetsWithoutEasyShape && !_difficultyModel.IsPlayerStruggling)
+                return;
+
+            var easyCandidates = new List<ShapeId>();
+            foreach (var shapeId in ShapeLibrary.GetAllShapeIds())
+            {
+                if (!ShapeLibrary.TryGetShape(shapeId, out var shape))
+                    continue;
+
+                if (shape.Offsets.Length > EasyShapeMaxCellCount)
+                    continue;
+
+                if (boardState != null && !PlacementSearch.HasAnyValidPlacement(boardState, shape))
+                    continue;
+
+                easyCandidates.Add(shapeId);
+            }
+
+            if (easyCandidates.Count == 0)
+                return;
+
+            int missingEasyShapes = requiredEasyCount - easyShapeCount;
+            if (missingEasyShapes <= 0)
+                return;
+
+            for (int i = 0; i < missingEasyShapes; i++)
+            {
+                int replacementIndex = blockSet.Length - 1 - i;
+                if (replacementIndex < 0)
+                    break;
+
+                blockSet[replacementIndex] = easyCandidates[_rng.Next(easyCandidates.Count)];
+            }
+        }
+
+        private bool ContainsEasyShape(ShapeId[] blockSet)
+        {
+            if (blockSet == null)
+                return false;
+
+            for (int i = 0; i < blockSet.Length; i++)
+            {
+                if (!ShapeLibrary.TryGetShape(blockSet[i], out var shape))
+                    continue;
+
+                if (shape.Offsets.Length <= EasyShapeMaxCellCount)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private List<ShapeDefinition> ResolveShapes(ShapeId[] blockSet)
+        {
+            var shapes = new List<ShapeDefinition>(blockSet?.Length ?? 0);
+            if (blockSet == null)
+                return shapes;
+
+            for (int i = 0; i < blockSet.Length; i++)
+            {
+                if (ShapeLibrary.TryGetShape(blockSet[i], out var shape))
+                    shapes.Add(shape);
+            }
+
+            return shapes;
+        }
+
+        private int CountEasyShapes(ShapeId[] blockSet)
+        {
+            if (blockSet == null)
+                return 0;
+
+            int count = 0;
+            for (int i = 0; i < blockSet.Length; i++)
+            {
+                if (!ShapeLibrary.TryGetShape(blockSet[i], out var shape))
+                    continue;
+                if (shape.Offsets.Length <= EasyShapeMaxCellCount)
+                    count++;
+            }
+
+            return count;
+        }
+
+        private void TrackSpawnHistory(ShapeId[] blockSet)
+        {
+            if (blockSet == null)
+                return;
+
+            if (ContainsEasyShape(blockSet))
+                _setsWithoutEasyShape = 0;
+            else
+                _setsWithoutEasyShape++;
+
+            foreach (var shapeId in blockSet)
+            {
+                _recentSpawnHistory.Enqueue(shapeId);
+                while (_recentSpawnHistory.Count > RecentHistorySize)
+                    _recentSpawnHistory.Dequeue();
+            }
         }
         
         private ShapeId GetChallengeShape()

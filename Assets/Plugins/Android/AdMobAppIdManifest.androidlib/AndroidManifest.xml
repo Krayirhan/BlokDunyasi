@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.krayirhanstudio.blokdunyasi.admobappid">
+
+  <!-- Android 13+ (API 33) için zorunlu Reklam Kimliği izni -->
+  <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
+
+  <application>
+    <meta-data
+      android:name="com.google.android.gms.ads.APPLICATION_ID"
+      android:value="ca-app-pub-1185594059702325~8766826272"/>
+  </application>
+</manifest>

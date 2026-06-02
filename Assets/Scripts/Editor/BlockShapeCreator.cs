@@ -4,6 +4,7 @@ using UnityEditor;
 using BlockPuzzle.Core.Shapes;
 using BlockPuzzle.Core.Common;
 using Vector2Int = UnityEngine.Vector2Int;
+using Debug = BlockPuzzle.Core.Common.GameLogger;
 
 namespace BlockPuzzle.Editor
 {

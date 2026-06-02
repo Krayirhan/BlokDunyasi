@@ -1,0 +1,59 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a55a733d6f84474aa8d519474fe4c10, type: 3}
+  m_Name: DefaultAudioBank
+  m_EditorClassIdentifier: BlockPuzzleUnityAdapter::BlockPuzzle.UnityAdapter.Audio.AudioBank
+  mainMenuMusic: {fileID: 8300000, guid: d73252fa56440e6d8e06e925247646b6, type: 3}
+  gameplayMusic: {fileID: 8300000, guid: 271ef4b35fa1a4da0a49da38bf5fadb6, type: 3}
+  gameOverMusic: {fileID: 8300000, guid: e85929cf8888d55bd22713a213bb1a84, type: 3}
+  uiClick:
+    clips:
+    - {fileID: 8300000, guid: d76aa448f35fc91cd3d06a3bb6f9fcdb, type: 3}
+    volume: 0.75
+    pitchMin: 0.98
+    pitchMax: 1.03
+    randomVolumeJitter: 0.02
+  blockPlace:
+    clips:
+    - {fileID: 8300000, guid: c4b37d9589815df581ffa474b85ff737, type: 3}
+    volume: 0.85
+    pitchMin: 0.98
+    pitchMax: 1.04
+    randomVolumeJitter: 0.03
+  invalidDrop:
+    clips:
+    - {fileID: 8300000, guid: 6fccde4faa336dc1ee04e327624c4c61, type: 3}
+    volume: 0.8
+    pitchMin: 0.92
+    pitchMax: 0.98
+    randomVolumeJitter: 0.02
+  lineClear:
+    clips:
+    - {fileID: 8300000, guid: 9c6323bf592419d7f809402cca271e9b, type: 3}
+    volume: 1
+    pitchMin: 0.98
+    pitchMax: 1.06
+    randomVolumeJitter: 0.03
+  combo:
+    clips:
+    - {fileID: 8300000, guid: d1d61479d48a0c1af47b0d04964cdcc5, type: 3}
+    volume: 1
+    pitchMin: 1
+    pitchMax: 1.08
+    randomVolumeJitter: 0.03
+  gameOver:
+    clips:
+    - {fileID: 8300000, guid: ecdc5bf673c34ce124c64cc8d4fdc1a3, type: 3}
+    volume: 1
+    pitchMin: 1
+    pitchMax: 1
+    randomVolumeJitter: 0

@@ -11,6 +11,7 @@ namespace BlokDunyasiTools
     /// </summary>
     public static class AppIconTool
     {
+#pragma warning disable CS0618
         private const string DefaultIconAssetPath = "Assets/Branding/AppIconSource.png";
 
         [MenuItem("BlokDunyasi/Store/Apply App Icon (Default Source)", false, 320)]
@@ -177,6 +178,7 @@ namespace BlokDunyasiTools
 
             return "Assets" + fullAbsolute.Substring(assetsAbsolute.Length);
         }
+#pragma warning restore CS0618
     }
 }
 #endif
