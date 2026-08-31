@@ -16,8 +16,7 @@ Unity 6 ile geliştirilen, mobil odaklı blok puzzle oyunu.
 </div>
 
 <p align="center">
-  <img src="Assets/Images/mainmenu_background.png" alt="Ana menü" width="48%" />
-  <img src="Assets/Resources/mainmenu_background.png" alt="Oyun dünyası" width="48%" />
+  <img src="StoreScreenshots/main-menu.webp" alt="Blok Dünyası ana menü" width="32%" />
 </p>
 
 ## Oyun nedir?
@@ -34,16 +33,17 @@ Blok Dünyası’nda farklı şekillerdeki blokları 8×8 veya 10×10 oyun tahta
 | --- | --- | --- |
 | Dokunmatik sürükle-bırak ve masaüstü test akışı. | En iyi skor, ayarlar ve oyun durumu için kalıcı kayıt. | AdMob, Firebase Analytics/Crashlytics ve Google Play Games entegrasyonları. |
 
-## Görsel galeri
+## Oyun içinden gerçek ekranlar
 
 <p align="center">
-  <img src="Assets/Resources/Leaderboard/header_trophy.png" alt="Liderlik tablosu" width="22%" />
-  <img src="Assets/Resources/SettingsUI/professional-v1/panel.png" alt="Ayarlar paneli" width="22%" />
-  <img src="Assets/Images/theme4_wood/wood_background.png" alt="Ahşap tema" width="22%" />
-  <img src="Assets/Resources/UI/Buttons/btn_home.png" alt="Ana menü butonu" width="12%" />
+  <img src="StoreScreenshots/gameplay-807.webp" alt="807 puanlık oyun ekranı" width="18%" />
+  <img src="StoreScreenshots/gameplay-171.webp" alt="171 puanlık oyun ekranı" width="18%" />
+  <img src="StoreScreenshots/challenge-807.webp" alt="807 puan challenge ekranı" width="18%" />
+  <img src="StoreScreenshots/challenge-1000.webp" alt="1000 puan challenge ekranı" width="18%" />
+  <img src="StoreScreenshots/challenge-relax.webp" alt="Rahatlatıcı puzzle ekranı" width="18%" />
 </p>
 
-Oyun içi ekranlar ve tanıtım görselleri `StoreScreenshots/` ile `Assets/` altında tutulur.
+Bu galeri, oyunun gerçek akışından alınmış mobil ekranları gösterir: ana menü, aktif tahta, skor hedefi ve farklı oyun modları. Yeni mağaza görselleri `StoreScreenshots/` altında tutulmalıdır.
 
 ## Proje mimarisi
 
