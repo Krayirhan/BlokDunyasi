@@ -2,18 +2,26 @@ using GoogleMobileAds.Api;
 using BlockPuzzle.Core.Common;
 using UnityEngine;
 using System;
+using BlockPuzzle.Core.Monetization;
 
 /// <summary>
 /// Odullu reklam yukleme ve gosterim yasam dongusunu yonetir.
 /// </summary>
 public class RewardedAdManager : MonoBehaviour
 {
-    private const int MaxRetryAttempts = 3;
+    private const float RetryBaseDelaySeconds = 5f;
+    private const float RetryMaxDelaySeconds = 60f;
+    private const float LoadTimeoutSeconds = 20f;
     private RewardedAd _rewardedAd;
     private bool _isLoading;
     private string _cachedAdUnitId;
     private int _retryAttempts;
     private bool _retryScheduled;
+    private float? _timeScaleBeforeFullscreen;
+    private float _loadStartedAt;
+    private int _loadGeneration;
+
+    public bool IsLoading => _isLoading;
 
     public event Action OnRewardedAdLoaded;
     public event Action<string> OnRewardedAdFailedToLoad;
@@ -24,7 +32,7 @@ public class RewardedAdManager : MonoBehaviour
 
     public void LoadRewardedAd(string adUnitId)
     {
-        if (!AdPolicyManager.AreAdsAllowed()) return;
+        if (!AdPolicyManager.AreRewardedAdsAllowed()) return;
         if (AdMobManager.ExistingInstance != null && !AdMobManager.ExistingInstance.CanLoadAdsNow) return;
         GameLogger.Log("[Rewarded] LoadRewardedAd called.");
         
@@ -50,9 +58,20 @@ public class RewardedAdManager : MonoBehaviour
 
         _cachedAdUnitId = adUnitId;
         _isLoading = true;
+        _loadStartedAt = Time.realtimeSinceStartup;
         _retryScheduled = false;
 
-        RewardedAd.Load(adUnitId, new AdRequest(), HandleOnRewardedAdLoaded);
+        int loadGeneration = ++_loadGeneration;
+        RewardedAd.Load(adUnitId, AdRequestFactory.Create(), (ad, error) =>
+        {
+            if (loadGeneration != _loadGeneration)
+            {
+                ad?.Destroy();
+                return;
+            }
+
+            HandleOnRewardedAdLoaded(ad, error);
+        });
         GameLogger.Log("[Rewarded] Odullu reklam yukleniyor...");
     }
 
@@ -82,12 +101,30 @@ public class RewardedAdManager : MonoBehaviour
 
     public void DestroyRewardedAd()
     {
+        _loadGeneration++;
+        _isLoading = false;
         if (_rewardedAd == null)
             return;
 
         _rewardedAd.Destroy();
         _rewardedAd = null;
         GameLogger.Log("[Rewarded] Odullu reklam yok edildi.");
+    }
+
+    private void Update()
+    {
+        if (!_isLoading || !AdRecoveryPolicy.HasTimedOut(_loadStartedAt, Time.realtimeSinceStartup, LoadTimeoutSeconds))
+            return;
+
+        DestroyRewardedAd();
+        OnRewardedAdFailedToLoad?.Invoke("load_timeout");
+        if (!_retryScheduled && !string.IsNullOrWhiteSpace(_cachedAdUnitId))
+        {
+            _retryAttempts++;
+            _retryScheduled = true;
+            Invoke(nameof(RetryLoadRewardedAd), GetRetryDelaySeconds());
+        }
+        GameLogger.LogWarning("[Rewarded] Yukleme zaman asimina ugradi; kilit temizlendi.");
     }
 
     private void RetryLoadRewardedAd()
@@ -112,12 +149,11 @@ public class RewardedAdManager : MonoBehaviour
             OnRewardedAdFailedToLoad?.Invoke(errorMessage);
             if (AdMobManager.ExistingInstance != null
                 && AdMobManager.ExistingInstance.CanLoadAdsNow
-                && !_retryScheduled
-                && _retryAttempts < MaxRetryAttempts)
+                && !_retryScheduled)
             {
                 _retryAttempts++;
                 _retryScheduled = true;
-                Invoke(nameof(RetryLoadRewardedAd), 5f * _retryAttempts);
+                Invoke(nameof(RetryLoadRewardedAd), GetRetryDelaySeconds());
             }
             return;
         }
@@ -142,6 +178,7 @@ public class RewardedAdManager : MonoBehaviour
     private void HandleOnAdFullScreenContentOpened()
     {
         GameLogger.Log("[Rewarded] Reklam acildi.");
+        _timeScaleBeforeFullscreen = Time.timeScale;
         Time.timeScale = 0f;
         OnRewardedAdShown?.Invoke();
     }
@@ -149,7 +186,7 @@ public class RewardedAdManager : MonoBehaviour
     private void HandleOnAdFullScreenContentClosed()
     {
         GameLogger.Log("[Rewarded] Reklam kapatildi.");
-        Time.timeScale = 1f;
+        RestoreTimeScale();
         DestroyRewardedAd();
         OnRewardedAdClosed?.Invoke();
     }
@@ -157,13 +194,28 @@ public class RewardedAdManager : MonoBehaviour
     private void HandleOnAdFullScreenContentFailed(AdError error)
     {
         GameLogger.LogWarning($"[Rewarded] Reklam acilamadi: {error.GetMessage()}");
-        Time.timeScale = 1f;
+        RestoreTimeScale();
         DestroyRewardedAd();
         OnRewardedAdClosed?.Invoke();
     }
 
+    private float GetRetryDelaySeconds()
+    {
+        return AdRecoveryPolicy.GetRetryDelaySeconds(_retryAttempts, RetryBaseDelaySeconds, RetryMaxDelaySeconds);
+    }
+
+    private void RestoreTimeScale()
+    {
+        if (!_timeScaleBeforeFullscreen.HasValue)
+            return;
+
+        Time.timeScale = _timeScaleBeforeFullscreen.Value;
+        _timeScaleBeforeFullscreen = null;
+    }
+
     private void OnDestroy()
     {
+        RestoreTimeScale();
         DestroyRewardedAd();
     }
 }

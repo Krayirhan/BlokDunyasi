@@ -2,13 +2,16 @@ using GoogleMobileAds.Api;
 using BlockPuzzle.Core.Common;
 using UnityEngine;
 using System;
+using BlockPuzzle.Core.Monetization;
 
 /// <summary>
 /// Banner reklam yukleme ve gorunurluk yonetimi.
 /// </summary>
 public class BannerAdManager : MonoBehaviour
 {
-    private const int MaxRetryAttempts = 3;
+    private const float RetryBaseDelaySeconds = 5f;
+    private const float RetryMaxDelaySeconds = 60f;
+    private const float LoadTimeoutSeconds = 20f;
     private BannerView _bannerView;
     private bool _isLoading;
     private bool _isVisible;
@@ -17,6 +20,8 @@ public class BannerAdManager : MonoBehaviour
     private int _lastMeasuredHeightInPixels;
     private int _retryAttempts;
     private bool _retryScheduled;
+    private float _loadStartedAt;
+    private int _loadGeneration;
 
     public event Action OnBannerLoaded;
     public event Action<string> OnBannerFailedToLoad;
@@ -25,6 +30,8 @@ public class BannerAdManager : MonoBehaviour
     public event Action<AdValue> OnBannerPaid;
 
     public bool IsVisible => _bannerView != null && _isVisible;
+    public bool IsLoading => _isLoading;
+    public bool HasAd => _bannerView != null && !_isLoading;
     public int CurrentOccupiedHeightInPixels => IsVisible ? GetMeasuredHeightInPixels() : 0;
 
     public void LoadBannerAd(string adUnitId)
@@ -53,6 +60,7 @@ public class BannerAdManager : MonoBehaviour
 
         _cachedAdUnitId = adUnitId;
         _isLoading = true;
+        _loadStartedAt = Time.realtimeSinceStartup;
 
         int deviceWidth = ResolveAdaptiveBannerWidth();
         AdSize bannerSize = deviceWidth > 0
@@ -63,8 +71,9 @@ public class BannerAdManager : MonoBehaviour
             GameLogger.LogWarning("[Banner] Banner genisligi belirlenemedi. Son fallback olarak standart Banner boyutu kullaniliyor.");
 
         _bannerView = new BannerView(adUnitId, bannerSize, AdPosition.Bottom);
-        RegisterLifecycleCallbacks(_bannerView);
-        _bannerView.LoadAd(new AdRequest());
+        int loadGeneration = ++_loadGeneration;
+        RegisterLifecycleCallbacks(_bannerView, loadGeneration);
+        _bannerView.LoadAd(AdRequestFactory.Create());
 
         _retryScheduled = false;
         GameLogger.Log($"[Banner] Banner yukleniyor... visibleWanted={_shouldBeVisible}, width={deviceWidth}");
@@ -124,6 +133,8 @@ public class BannerAdManager : MonoBehaviour
 
     public void DestroyBannerAd()
     {
+        _loadGeneration++;
+        _isLoading = false;
         if (_bannerView == null)
             return;
 
@@ -132,6 +143,22 @@ public class BannerAdManager : MonoBehaviour
         _isVisible = false;
         _lastMeasuredHeightInPixels = 0;
         GameLogger.Log("[Banner] Banner yok edildi.");
+    }
+
+    private void Update()
+    {
+        if (!_isLoading || !AdRecoveryPolicy.HasTimedOut(_loadStartedAt, Time.realtimeSinceStartup, LoadTimeoutSeconds))
+            return;
+
+        DestroyBannerAd();
+        OnBannerFailedToLoad?.Invoke("load_timeout");
+        if (!_retryScheduled && !string.IsNullOrWhiteSpace(_cachedAdUnitId))
+        {
+            _retryAttempts++;
+            _retryScheduled = true;
+            Invoke(nameof(RetryLoadBannerAd), AdRecoveryPolicy.GetRetryDelaySeconds(_retryAttempts, RetryBaseDelaySeconds, RetryMaxDelaySeconds));
+        }
+        GameLogger.LogWarning("[Banner] Yukleme zaman asimina ugradi; kilit temizlendi.");
     }
 
     public void RefreshBannerLayout()
@@ -165,14 +192,29 @@ public class BannerAdManager : MonoBehaviour
             LoadBannerAd(_cachedAdUnitId);
     }
 
-    private void RegisterLifecycleCallbacks(BannerView bannerView)
+    private void RegisterLifecycleCallbacks(BannerView bannerView, int loadGeneration)
     {
-        bannerView.OnBannerAdLoaded += HandleOnBannerAdLoaded;
-        bannerView.OnBannerAdLoadFailed += HandleOnBannerAdLoadFailed;
-        bannerView.OnAdPaid += adValue => OnBannerPaid?.Invoke(adValue);
+        bannerView.OnBannerAdLoaded += () =>
+        {
+            if (loadGeneration == _loadGeneration)
+                HandleOnBannerAdLoaded();
+        };
+        bannerView.OnBannerAdLoadFailed += error =>
+        {
+            if (loadGeneration == _loadGeneration)
+                HandleOnBannerAdLoadFailed(error);
+        };
+        bannerView.OnAdPaid += adValue =>
+        {
+            if (loadGeneration == _loadGeneration)
+                OnBannerPaid?.Invoke(adValue);
+        };
         
         bannerView.OnAdClicked += () => 
         {
+            if (loadGeneration != _loadGeneration)
+                return;
+
             AdPolicyManager.RecordAdClick();
             if (!AdPolicyManager.AreAdsAllowed())
             {
@@ -221,11 +263,14 @@ public class BannerAdManager : MonoBehaviour
         if (AdMobManager.ExistingInstance != null
             && AdMobManager.ExistingInstance.CanLoadAdsNow
             && !_retryScheduled
-            && _retryAttempts < MaxRetryAttempts)
+            )
         {
             _retryAttempts++;
             _retryScheduled = true;
-            Invoke(nameof(RetryLoadBannerAd), 5f * _retryAttempts);
+            float retryDelay = Mathf.Min(
+                RetryMaxDelaySeconds,
+                RetryBaseDelaySeconds * Mathf.Pow(2f, Mathf.Max(0, _retryAttempts - 1)));
+            Invoke(nameof(RetryLoadBannerAd), retryDelay);
         }
     }
 
@@ -252,9 +297,16 @@ public class BannerAdManager : MonoBehaviour
             return;
         }
 
-        float measuredHeight = _bannerView.GetHeightInPixels();
-        if (measuredHeight > 0f)
-            _lastMeasuredHeightInPixels = Mathf.CeilToInt(measuredHeight);
+        try
+        {
+            float measuredHeight = _bannerView.GetHeightInPixels();
+            if (measuredHeight > 0f)
+                _lastMeasuredHeightInPixels = Mathf.CeilToInt(measuredHeight);
+        }
+        catch (System.Exception)
+        {
+            // Banner internal GameObject may be destroyed during scene transition
+        }
     }
 
     private void OnDestroy()

@@ -38,6 +38,19 @@ public static class AdTelemetry
         });
     }
 
+    public static void DispatchLoadFailed(string adFormat, string placement, string errorMessage)
+    {
+        Publish(new AdTelemetryRecord
+        {
+            Category = "ad_lifecycle",
+            EventName = "load_failed",
+            AdFormat = adFormat ?? string.Empty,
+            Placement = placement ?? string.Empty,
+            ErrorMessage = errorMessage ?? string.Empty,
+            TimestampUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        });
+    }
+
     private static void Publish(AdTelemetryRecord record)
     {
         OnEvent?.Invoke(record);
@@ -55,6 +68,7 @@ public struct AdTelemetryRecord
     public long RevenueValueMicros;
     public string CurrencyCode;
     public string Precision;
+    public string ErrorMessage;
     public string RewardType;
     public double RewardAmount;
     public long TimestampUnixMs;

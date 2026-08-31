@@ -42,8 +42,8 @@ public class AdMobRuntimeConfig : ScriptableObject
     [Header("Interstitial Strategy")]
     [SerializeField] private bool enableInterstitialOnGameOverScene = true;
     [SerializeField] [Min(0)] private int minimumCompletedSessionsBeforeInterstitial = 2;
-    [SerializeField] [Min(0f)] private float minimumSecondsBetweenInterstitials = 180f;
-    [SerializeField] [Min(0)] private int maxInterstitialsPerSession = 1;
+    [SerializeField] [Min(0f)] private float minimumSecondsBetweenInterstitials = 90f;
+    [SerializeField] [Min(0)] private int maxInterstitialsPerSession = 3;
     [SerializeField] [Min(0f)] private float cooldownAfterRewardedSeconds = 90f;
 
     [Header("Analytics")]
@@ -70,15 +70,21 @@ public class AdMobRuntimeConfig : ScriptableObject
     public int MaxInterstitialsPerSession => Mathf.Max(0, maxInterstitialsPerSession);
     public float CooldownAfterRewardedSeconds => Mathf.Max(0f, cooldownAfterRewardedSeconds);
     public bool EnableAnalyticsFileLogging => enableAnalyticsFileLogging;
+    public bool HasProductionAndroidAdUnitIds => !string.IsNullOrWhiteSpace(androidBannerAdUnitId)
+        && !string.IsNullOrWhiteSpace(androidInterstitialAdUnitId)
+        && !string.IsNullOrWhiteSpace(androidRewardedAdUnitId);
+
+    public bool HasProductionIosAdUnitIds => !string.IsNullOrWhiteSpace(iosBannerAdUnitId)
+        && !string.IsNullOrWhiteSpace(iosInterstitialAdUnitId)
+        && !string.IsNullOrWhiteSpace(iosRewardedAdUnitId);
 
     public AdUnitMode ResolveAdUnitMode()
     {
 #if ADMOB_FORCE_TEST_ADS
         return AdUnitMode.GoogleTestManualOverride;
-#endif
-#if UNITY_EDITOR
+#elif UNITY_EDITOR
         return AdUnitMode.GoogleTestEditorSafety;
-#endif
+#else
         if (useGoogleTestAdUnits)
             return AdUnitMode.GoogleTestManualOverride;
 
@@ -86,6 +92,7 @@ public class AdMobRuntimeConfig : ScriptableObject
             return AdUnitMode.GoogleTestDebugBuild;
 
         return AdUnitMode.Production;
+#endif
     }
 
     public bool ShouldUseGoogleTestAdUnits()
@@ -163,5 +170,17 @@ public class AdMobRuntimeConfig : ScriptableObject
         return !string.IsNullOrWhiteSpace(bannerAdUnitId)
             || !string.IsNullOrWhiteSpace(interstitialAdUnitId)
             || !string.IsNullOrWhiteSpace(rewardedAdUnitId);
+    }
+
+    private void OnValidate()
+    {
+        if (!HasProductionAndroidAdUnitIds)
+            Debug.LogWarning("[AdMobRuntimeConfig] Android production ad unit configuration is incomplete.", this);
+
+        if (Application.platform == RuntimePlatform.IPhonePlayer && !HasProductionIosAdUnitIds)
+            Debug.LogWarning("[AdMobRuntimeConfig] iOS production ad unit configuration is incomplete.", this);
+
+        if (minimumCompletedSessionsBeforeInterstitial < 0 || maxInterstitialsPerSession < 0)
+            Debug.LogError("[AdMobRuntimeConfig] Interstitial limits cannot be negative.", this);
     }
 }

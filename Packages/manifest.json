@@ -9,7 +9,7 @@
     }
   ],
   "dependencies": {
-    "com.google.ads.mobile": "11.0.0",
+    "com.google.ads.mobile": "11.4.0",
     "com.google.play.appupdate": "1.8.5",
     "com.unity.2d.animation": "12.0.2",
     "com.unity.2d.aseprite": "2.0.2",

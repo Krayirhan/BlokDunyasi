@@ -9,7 +9,8 @@ using UnityEngine.UI;
 
 public static class ButtonTextStyleApplier
 {
-    private const string TargetFontPath = "Assets/Skyden_Games/Free_Casual_GUI/Demo/Fonts/Baloo/Baloo-Regular SDF.asset";
+    private const string TargetFontPath = "Assets/Resources/TMP/GameFont SDF.asset";
+    private const string FallbackFontPath = "Assets/Skyden_Games/Free_Casual_GUI/Demo/Fonts/Baloo/Baloo-Regular SDF.asset";
 
     [MenuItem("Tools/BlokDunyasi/Apply Button Text Style")]
     public static void ApplyButtonTextStyleMenu()
@@ -29,7 +30,12 @@ public static class ButtonTextStyleApplier
         var targetFont = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(TargetFontPath);
         if (targetFont == null)
         {
-            throw new Exception("TMP font bulunamadı: " + TargetFontPath);
+            targetFont = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FallbackFontPath);
+        }
+
+        if (targetFont == null)
+        {
+            throw new Exception("TMP font bulunamadı: " + TargetFontPath + " ya da " + FallbackFontPath);
         }
 
         var changedTmpCount = 0;

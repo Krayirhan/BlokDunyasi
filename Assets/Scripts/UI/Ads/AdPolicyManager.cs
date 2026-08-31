@@ -1,53 +1,29 @@
 using UnityEngine;
 using BlockPuzzle.Core.Common;
 using Debug = BlockPuzzle.Core.Common.GameLogger;
+using BlockPuzzle.Core.Monetization;
 
 public static class AdPolicyManager
 {
-    private const string ClickCountKey = SettingsKeys.AdPolicyClickCount;
-    private const string BanMatchesLeftKey = SettingsKeys.AdPolicyBanMatchesLeft;
-    
-    private const int MaxClicksAllowed = 3;
-    private const int BanDurationMatches = 2; // "2 oyun boyunca"
-
     public static void RecordAdClick()
     {
-        var config = Resources.Load<AdMobRuntimeConfig>(AdMobRuntimeConfig.ResourcesPath);
-        if (config != null && config.ShouldUseGoogleTestAdUnits())
-            return;
-
-        int currentClicks = PlayerPrefs.GetInt(ClickCountKey, 0);
-        currentClicks++;
-        
-        Debug.Log($"[AdPolicyManager] Ad clicked! Total clicks: {currentClicks}");
-        
-        if (currentClicks >= MaxClicksAllowed)
-        {
-            PlayerPrefs.SetInt(BanMatchesLeftKey, BanDurationMatches);
-            PlayerPrefs.SetInt(ClickCountKey, 0);
-            Debug.LogWarning($"[AdPolicyManager] Penalty applied! Ads banned for {BanDurationMatches} matches.");
-        }
-        else
-        {
-            PlayerPrefs.SetInt(ClickCountKey, currentClicks);
-        }
-        PlayerPrefs.Save();
+        // AdMob invalid-click protection is handled by Google. A local click
+        // counter must not permanently disable ads for legitimate players.
+        Debug.Log("[AdPolicyManager] Ad click recorded; no local ad ban applied.");
     }
 
     public static void OnMatchEnded()
     {
-        int banLeft = PlayerPrefs.GetInt(BanMatchesLeftKey, 0);
-        if (banLeft > 0)
-        {
-            banLeft--;
-            PlayerPrefs.SetInt(BanMatchesLeftKey, banLeft);
-            PlayerPrefs.Save();
-            Debug.Log($"[AdPolicyManager] Match ended. Ban matches left: {banLeft}");
-        }
+        // Kept as a no-op bridge for existing game-over event subscribers.
     }
 
-    public static bool AreAdsAllowed()
+    public static bool AreAutomaticAdsAllowed()
     {
-        return PlayerPrefs.GetInt(BanMatchesLeftKey, 0) <= 0;
+        return AdEntitlementPolicy.AllowAutomaticAds(EntitlementManager.IsRemoveAdsActive);
     }
+
+    // Rewarded ads are user-initiated and remain available after Remove Ads.
+    public static bool AreRewardedAdsAllowed() => AdEntitlementPolicy.AllowRewardedAds(EntitlementManager.IsRemoveAdsActive);
+
+    public static bool AreAdsAllowed() => AreAutomaticAdsAllowed();
 }

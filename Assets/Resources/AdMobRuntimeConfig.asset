@@ -17,20 +17,18 @@ MonoBehaviour:
   forceGoogleTestAdsInDebugBuilds: 1
   testDeviceHashedIds: []
   tagForUnderAgeOfConsent: 0
-  showBannerOnAllScenes: 1
+  showBannerOnAllScenes: 0
   showBannerOnNonGameplayScenes: 1
   bannerSceneNames:
   - MainMenu
-  - Scores
   - Settings
-  - "OyunEkran\u0131"
   - GameOver
   enableInterstitialOnGameOverScene: 1
   minimumCompletedSessionsBeforeInterstitial: 2
-  minimumSecondsBetweenInterstitials: 180
-  maxInterstitialsPerSession: 1
+  minimumSecondsBetweenInterstitials: 90
+  maxInterstitialsPerSession: 3
   cooldownAfterRewardedSeconds: 90
-  enableAnalyticsFileLogging: 1
+  enableAnalyticsFileLogging: 0
   androidBannerAdUnitId: ca-app-pub-1185594059702325/9628383743
   androidInterstitialAdUnitId: ca-app-pub-1185594059702325/4328923203
   androidRewardedAdUnitId: ca-app-pub-1185594059702325/6815218840

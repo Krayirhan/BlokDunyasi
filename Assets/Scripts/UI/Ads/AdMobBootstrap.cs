@@ -10,10 +10,13 @@ using Debug = BlockPuzzle.Core.Common.GameLogger;
 /// </summary>
 public class AdMobBootstrap : MonoBehaviour
 {
+    private const float InitializationTimeoutSeconds = 15f;
     private static AdMobBootstrap _instance;
     private static bool _initialized;
     private static bool _initializing;
     private static readonly List<Action<bool>> PendingInitializationCallbacks = new();
+    private Coroutine _initializationWatchdogRoutine;
+    private int _initializationGeneration;
 
     public static AdMobBootstrap Instance
     {
@@ -59,12 +62,26 @@ public class AdMobBootstrap : MonoBehaviour
             return;
 
         _initializing = true;
+        int generation = ++_initializationGeneration;
+        UnityEngine.Debug.Log($"[AdMob] SDK initialization started. generation={generation}; editor={Application.isEditor}; platform={Application.platform}");
+        if (_initializationWatchdogRoutine != null)
+            StopCoroutine(_initializationWatchdogRoutine);
+        _initializationWatchdogRoutine = StartCoroutine(InitializationWatchdogRoutine(generation));
         ConfigureRequestSettings(config);
 
         MobileAds.Initialize((initStatus) =>
         {
+            if (generation != _initializationGeneration)
+                return;
+
+            if (_initializationWatchdogRoutine != null)
+            {
+                StopCoroutine(_initializationWatchdogRoutine);
+                _initializationWatchdogRoutine = null;
+            }
             _initializing = false;
             _initialized = initStatus != null;
+            UnityEngine.Debug.Log($"[AdMob] SDK initialization callback received. success={_initialized}; statusNull={initStatus == null}");
 
             if (_initialized)
             {
@@ -79,8 +96,24 @@ public class AdMobBootstrap : MonoBehaviour
         });
     }
 
+    private System.Collections.IEnumerator InitializationWatchdogRoutine(int generation)
+    {
+        yield return new WaitForSecondsRealtime(InitializationTimeoutSeconds);
+        if (generation != _initializationGeneration || !_initializing)
+            yield break;
+
+        _initializationWatchdogRoutine = null;
+        _initializing = false;
+        UnityEngine.Debug.LogError("[AdMob] SDK initialization callback timeout.");
+        Debug.LogError("[AdMob] SDK initialization callback zaman asimi.");
+        FlushPendingCallbacks(false);
+    }
+
     private static void ConfigureRequestSettings(AdMobRuntimeConfig config)
     {
+#pragma warning disable 0618
+        MobileAds.RaiseAdEventsOnUnityMainThread = true;
+#pragma warning restore 0618
         MobileAds.SetiOSAppPauseOnBackground(true);
 
         var requestConfiguration = new RequestConfiguration
