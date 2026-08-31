@@ -3,20 +3,12 @@ using System;
 using BlockPuzzle.Core.Board;
 using BlockPuzzle.Core.Rules;
 using BlockPuzzle.Core.Shapes;
+using BlockPuzzle.Core.Common;
 
 namespace BlockPuzzle.Core.Engine
 {
     /// <summary>
     /// Complete game state including board, score, active blocks, and game status.
-    /// <para>
-    /// <see cref="GameState"/> is not deeply immutable. It holds mutable child objects such as
-    /// <see cref="BoardState"/>, <see cref="ActiveBlocks"/>, and <see cref="ComboState"/>.
-    /// </para>
-    /// <para>
-    /// <see cref="GameEngine.CurrentState"/> should be treated as live state. Code that needs
-    /// isolation for replay, persistence, undo, or assertions must call <see cref="Clone"/> or
-    /// <see cref="CreateSnapshot"/> to obtain a deep copy.
-    /// </para>
     /// </summary>
     [Serializable]
     public class GameState
@@ -65,6 +57,16 @@ namespace BlockPuzzle.Core.Engine
         /// Time of last move for analytics.
         /// </summary>
         public DateTime LastMoveTime { get; private set; }
+
+        /// <summary>
+        /// Active Game Mode for score rules and layout adjustments.
+        /// </summary>
+        public GameMode Mode { get; private set; }
+
+        /// <summary>
+        /// Number of times rescue/continue has been used in this run.
+        /// </summary>
+        public int RescueCount { get; private set; }
         
         /// <summary>
         /// Current combo streak (convenience property).
@@ -79,8 +81,6 @@ namespace BlockPuzzle.Core.Engine
         {
             get
             {
-                // Always return 3 elements - one for each slot
-                // null means slot is empty (block was placed)
                 var shapes = new ShapeDefinition[3];
                 
                 for (int i = 0; i < 3; i++)
@@ -94,18 +94,13 @@ namespace BlockPuzzle.Core.Engine
                         }
                         else
                         {
-                            // BUG DETECTION: ShapeId exists in ActiveBlocks but not in ShapeLibrary!
-                            // This causes the "2 blocks instead of 3" visual bug
-                            System.Diagnostics.Debug.WriteLine($"[GameState.AvailableShapes] CRITICAL: Slot {i} has ShapeId {shapeId} but ShapeLibrary.TryGetShape returned false! This ShapeId is not registered in ShapeLibrary.");
-                            // Fallback: Use Single block to prevent null slot
+                            System.Diagnostics.Debug.WriteLine($"[GameState.AvailableShapes] CRITICAL: Slot {i} has ShapeId {shapeId} but ShapeLibrary.TryGetShape returned false!");
                             if (ShapeLibrary.TryGetShape(ShapeLibrary.Single, out var fallbackShape))
                             {
                                 shapes[i] = fallbackShape;
-                                System.Diagnostics.Debug.WriteLine($"[GameState.AvailableShapes] Using fallback Single block for slot {i}");
                             }
                         }
                     }
-                    // else shapes[i] stays null (slot is empty - block was placed)
                 }
                 return shapes;
             }
@@ -123,7 +118,7 @@ namespace BlockPuzzle.Core.Engine
             return shape;
         }
         
-        public GameState(int boardWidth = 10, int boardHeight = 10)
+        public GameState(int boardWidth = 10, int boardHeight = 10, GameMode mode = GameMode.Classic)
         {
             Board = new BoardState(boardWidth, boardHeight);
             Score = 0;
@@ -134,6 +129,8 @@ namespace BlockPuzzle.Core.Engine
             TotalLinesCleared = 0;
             StartTime = DateTime.Now;
             LastMoveTime = StartTime;
+            Mode = mode;
+            RescueCount = 0;
         }
         
         /// <summary>
@@ -149,7 +146,7 @@ namespace BlockPuzzle.Core.Engine
             if (ComboState == null)
                 throw new InvalidOperationException("Cannot clone GameState when ComboState is null.");
 
-            return new GameState(Board.Width, Board.Height)
+            return new GameState(Board.Width, Board.Height, Mode)
             {
                 Board = Board.Clone(),
                 Score = Score,
@@ -159,7 +156,8 @@ namespace BlockPuzzle.Core.Engine
                 MoveCount = MoveCount,
                 TotalLinesCleared = TotalLinesCleared,
                 StartTime = StartTime,
-                LastMoveTime = LastMoveTime
+                LastMoveTime = LastMoveTime,
+                RescueCount = RescueCount
             };
         }
 
@@ -174,8 +172,6 @@ namespace BlockPuzzle.Core.Engine
         /// <summary>
         /// Creates a new game state with updated board.
         /// </summary>
-        /// <param name="newBoard">New board state</param>
-        /// <returns>New GameState with updated board</returns>
         public GameState WithBoard(BoardState newBoard)
         {
             if (newBoard == null)
@@ -189,8 +185,6 @@ namespace BlockPuzzle.Core.Engine
         /// <summary>
         /// Creates a new game state with updated score.
         /// </summary>
-        /// <param name="newScore">New score value</param>
-        /// <returns>New GameState with updated score</returns>
         public GameState WithScore(int newScore)
         {
             var newState = Clone();
@@ -201,8 +195,6 @@ namespace BlockPuzzle.Core.Engine
         /// <summary>
         /// Creates a new game state with updated active blocks.
         /// </summary>
-        /// <param name="newActiveBlocks">New active blocks</param>
-        /// <returns>New GameState with updated active blocks</returns>
         public GameState WithActiveBlocks(ActiveBlocks newActiveBlocks)
         {
             if (newActiveBlocks == null)
@@ -216,8 +208,6 @@ namespace BlockPuzzle.Core.Engine
         /// <summary>
         /// Creates a new game state with updated combo state.
         /// </summary>
-        /// <param name="newComboState">New combo state</param>
-        /// <returns>New GameState with updated combo state</returns>
         public GameState WithComboState(ComboState newComboState)
         {
             if (newComboState == null)
@@ -231,7 +221,6 @@ namespace BlockPuzzle.Core.Engine
         /// <summary>
         /// Creates a new game state marking game as over.
         /// </summary>
-        /// <returns>New GameState with game over flag set</returns>
         public GameState WithGameOver()
         {
             var newState = Clone();
@@ -252,7 +241,6 @@ namespace BlockPuzzle.Core.Engine
         /// <summary>
         /// Creates a new game state with incremented move count.
         /// </summary>
-        /// <returns>New GameState with incremented move count</returns>
         public GameState WithIncrementedMoveCount()
         {
             var newState = Clone();
@@ -275,8 +263,6 @@ namespace BlockPuzzle.Core.Engine
         /// <summary>
         /// Creates a new game state with updated lines cleared count.
         /// </summary>
-        /// <param name="linesClearedThisMove">Number of lines cleared in this move</param>
-        /// <returns>New GameState with updated lines cleared</returns>
         public GameState WithLinesCleared(int linesClearedThisMove)
         {
             if (linesClearedThisMove < 0)
@@ -317,11 +303,30 @@ namespace BlockPuzzle.Core.Engine
             newState.LastMoveTime = lastMoveTime;
             return newState;
         }
+
+        /// <summary>
+        /// Creates a new game state with explicit rescue/continue count.
+        /// </summary>
+        public GameState WithRescueCount(int rescueCount)
+        {
+            var newState = Clone();
+            newState.RescueCount = rescueCount < 0 ? 0 : rescueCount;
+            return newState;
+        }
+
+        /// <summary>
+        /// Creates a new game state with explicit game mode.
+        /// </summary>
+        public GameState WithGameMode(GameMode mode)
+        {
+            var newState = Clone();
+            newState.Mode = mode;
+            return newState;
+        }
         
         /// <summary>
         /// Gets the elapsed game time.
         /// </summary>
-        /// <returns>Time elapsed since game start</returns>
         public TimeSpan GetElapsedTime()
         {
             return DateTime.Now - StartTime;
@@ -330,7 +335,6 @@ namespace BlockPuzzle.Core.Engine
         /// <summary>
         /// Gets the time since last move.
         /// </summary>
-        /// <returns>Time since last move</returns>
         public TimeSpan GetTimeSinceLastMove()
         {
             return DateTime.Now - LastMoveTime;
@@ -339,7 +343,7 @@ namespace BlockPuzzle.Core.Engine
         public override string ToString()
         {
             return $"Score: {Score}, Moves: {MoveCount}, Lines: {TotalLinesCleared}, " +
-                   $"ActiveBlocks: {ActiveBlocks.Count}, GameOver: {IsGameOver}";
+                   $"ActiveBlocks: {ActiveBlocks.Count}, GameOver: {IsGameOver}, Mode: {Mode}, Rescues: {RescueCount}";
         }
     }
 }

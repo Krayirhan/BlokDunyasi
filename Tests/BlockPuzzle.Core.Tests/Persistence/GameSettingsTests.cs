@@ -8,7 +8,7 @@ namespace BlockPuzzle.Core.Tests.Persistence
     public class GameSettingsTests
     {
         [Test]
-        public void Validate_LegacyPlacementFlags_SyncsNewPreviewFlags()
+        public void Validate_NewPreviewFlags_UpdateLegacyAliasesWhenDisabled()
         {
             var settings = new GameSettings
             {
@@ -20,10 +20,10 @@ namespace BlockPuzzle.Core.Tests.Persistence
 
             settings.Validate();
 
-            Assert.IsTrue(settings.ShowPlacementPreview);
-            Assert.IsTrue(settings.ShowLineClearPreview);
-            Assert.IsTrue(settings.ShowPlacementHints);
-            Assert.IsTrue(settings.ShowValidPlacements);
+            Assert.IsFalse(settings.ShowPlacementPreview);
+            Assert.IsFalse(settings.ShowLineClearPreview);
+            Assert.IsFalse(settings.ShowPlacementHints);
+            Assert.IsFalse(settings.ShowValidPlacements);
         }
 
         [Test]

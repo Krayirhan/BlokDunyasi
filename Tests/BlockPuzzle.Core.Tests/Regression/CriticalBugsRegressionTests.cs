@@ -61,7 +61,7 @@ namespace BlockPuzzle.Core.Tests.Regression
             var move = engine.AttemptMove(0, new Int2(3, 0));
 
             Assert.IsTrue(move.Success);
-            Assert.AreEqual(20, move.ScoreDelta);
+            Assert.AreEqual(312, move.ScoreDelta);
             Assert.AreEqual(int.MaxValue, move.TotalScore);
             Assert.AreEqual(int.MaxValue, engine.CurrentState.Score);
         }

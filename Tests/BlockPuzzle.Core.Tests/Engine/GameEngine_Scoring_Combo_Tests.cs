@@ -38,10 +38,10 @@ namespace BlockPuzzle.Core.Tests.Engine
             // Assert: first clear must be streak 1 and score should use current default formula.
             Assert.IsTrue(result.Success, "Move should succeed.");
             Assert.AreEqual(1, result.LinesCleared, "Exactly one line should be cleared.");
-            Assert.AreEqual(20, result.ScoreDelta, "Move result should report per-move score delta.");
-            Assert.AreEqual(20, result.TotalScore, "Move result should report total score after move.");
+            Assert.AreEqual(312, result.ScoreDelta, "Move result should report per-move score delta.");
+            Assert.AreEqual(312, result.TotalScore, "Move result should report total score after move.");
             Assert.AreEqual(1, engine.CurrentState.ComboState.Streak, "Combo streak should be 1 on first clear.");
-            Assert.AreEqual(20, engine.CurrentState.Score, "Score should follow the active score config.");
+            Assert.AreEqual(312, engine.CurrentState.Score, "Score should follow the active score config.");
         }
 
         [Test]
@@ -103,7 +103,7 @@ namespace BlockPuzzle.Core.Tests.Engine
             state = state.WithScore(123);
 
             var combo = new ComboState();
-            combo.SetStreak(2); // next clear should use streak=3 => combo x1.5
+            combo.SetStreak(2); // next clear should use streak=3 => combo x2.8
             state = state.WithComboState(combo);
 
             engine.LoadGame(state);
@@ -112,7 +112,7 @@ namespace BlockPuzzle.Core.Tests.Engine
 
             Assert.AreEqual(1, preview.LinesCleared);
             Assert.AreEqual(3, preview.ComboStreak);
-            Assert.AreEqual(30, preview.ScoreDelta, "Expected 16 * 1.25 * 1.5 = 30.");
+            Assert.AreEqual(672, preview.ScoreDelta, "Expected 150 * 1.6 * 2.8 = 672.");
 
             // Preview must not mutate live game state.
             Assert.AreEqual(123, engine.CurrentState.Score);
@@ -145,7 +145,7 @@ namespace BlockPuzzle.Core.Tests.Engine
             var move = engine.AttemptMove(0, new Int2(3, 0));
 
             Assert.IsTrue(move.Success);
-            Assert.AreEqual(20, move.ScoreDelta);
+            Assert.AreEqual(312, move.ScoreDelta);
             Assert.AreEqual(int.MaxValue, move.TotalScore);
             Assert.AreEqual(int.MaxValue, engine.CurrentState.Score);
         }

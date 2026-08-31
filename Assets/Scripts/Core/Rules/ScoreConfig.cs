@@ -35,7 +35,7 @@ namespace BlockPuzzle.Core.Rules
     [Serializable]
     public sealed class ScoreConfig
     {
-        public const int DefaultFormulaVersion = 9;
+        public const int DefaultFormulaVersion = 11;
 
         public int FormulaVersion { get; }
         public int BasePointsPerLine { get; }
@@ -161,28 +161,38 @@ namespace BlockPuzzle.Core.Rules
         {
             return new ScoreConfig(
                 formulaVersion: DefaultFormulaVersion,
-                basePointsPerLine: 32,
-                basePointsPerPlacement: 8,
-                basePointsPerPlacedCell: 3,
-                highRiskPlacementBonus: 8,
-                multiLineFinisherBonus: 28,
-                highComboClearBonus: 36,
-                placementComboStepMultiplier: 0.09f,
-                placementComboMaxMultiplier: 1.75f,
+
+                basePointsPerLine:          150,
+                basePointsPerPlacement:      25,
+                basePointsPerPlacedCell:       8,
+                highRiskPlacementBonus:       30,
+                multiLineFinisherBonus:      250,
+                highComboClearBonus:         150,
+                placementComboStepMultiplier: 0.15f,
+                placementComboMaxMultiplier:  2.5f,
+
                 roundingMode: ScoreRoundingMode.Nearest,
+
                 lineMultiplierCurve: new[]
                 {
                     new ScoreCurvePoint(1, 1.6f),
-                    new ScoreCurvePoint(2, 2.6f),
-                    new ScoreCurvePoint(3, 3.9f),
-                    new ScoreCurvePoint(4, 5.4f)
+                    new ScoreCurvePoint(2, 3.2f),
+                    new ScoreCurvePoint(3, 5.8f),
+                    new ScoreCurvePoint(4, 9.0f),
+                    new ScoreCurvePoint(6, 11.0f),
+                    new ScoreCurvePoint(8, 12.0f)
                 },
+
                 comboMultiplierCurve: new[]
                 {
-                    new ScoreCurvePoint(1, 1.1f),
-                    new ScoreCurvePoint(2, 1.55f),
-                    new ScoreCurvePoint(5, 2.45f),
-                    new ScoreCurvePoint(10, 3.5f)
+                    new ScoreCurvePoint(1,  1.3f),
+                    new ScoreCurvePoint(2,  2.0f),
+                    new ScoreCurvePoint(3,  2.8f),
+                    new ScoreCurvePoint(5,  3.8f),
+                    new ScoreCurvePoint(7,  5.0f),
+                    new ScoreCurvePoint(10, 6.5f),
+                    new ScoreCurvePoint(15, 8.5f),
+                    new ScoreCurvePoint(20, 10.0f)
                 });
         }
     }

@@ -72,11 +72,11 @@ namespace BlockPuzzle.Core.Engine
         /// </summary>
         public event Action<GameState> GameOver;
         
-        public GameEngine(SeededRng rng, int boardWidth = 10, int boardHeight = 10, ScoreConfig scoreConfig = null)
+        public GameEngine(SeededRng rng, int boardWidth = 10, int boardHeight = 10, ScoreConfig scoreConfig = null, GameMode mode = GameMode.Classic)
         {
             _blockSpawner = new BlockSpawner(rng);
             _scoreConfig = scoreConfig ?? ScoreConfig.Default;
-            CurrentState = new GameState(boardWidth, boardHeight);
+            CurrentState = new GameState(boardWidth, boardHeight, mode);
         }
         
         /// <summary>
@@ -88,7 +88,7 @@ namespace BlockPuzzle.Core.Engine
             if (seed.HasValue)
                 _blockSpawner.Reset(seed.Value);
             
-            CurrentState = new GameState(CurrentState.Board.Width, CurrentState.Board.Height);
+            CurrentState = new GameState(CurrentState.Board.Width, CurrentState.Board.Height, CurrentState.Mode);
             SpawnNewBlocks();
             OnStateChanged();
         }
@@ -267,6 +267,12 @@ namespace BlockPuzzle.Core.Engine
         /// <returns>True when continuation is successful; otherwise false.</returns>
         public bool TryContinueAfterGameOver()
         {
+            if (CurrentState.RescueCount >= 3)
+            {
+                System.Diagnostics.Debug.WriteLine("[GameEngine.TryContinueAfterGameOver] Aborted: Max 3 rescues per run reached.");
+                return false;
+            }
+
             bool hasNoMoves = !CurrentState.ActiveBlocks.IsEmpty &&
                               !CurrentState.ActiveBlocks.HasPlaceableBlocks(CurrentState.Board);
 
@@ -286,13 +292,29 @@ namespace BlockPuzzle.Core.Engine
                 return false;
             }
 
+            // Halve combo count, reset graceUsed, increment rescueCount
+            int currentCombo = CurrentState.Combo;
+            int newCombo = 0;
+            if (currentCombo > 0)
+            {
+                newCombo = Math.Max(1, currentCombo / 2);
+            }
+
+            var comboState = CurrentState.ComboState.Clone();
+            comboState.SetStreak(newCombo);
+            comboState.GraceUsed = false;
+
+            int newRescueCount = CurrentState.RescueCount + 1;
+
             CurrentState = CurrentState
                 .WithGameOverState(false)
-                .WithActiveBlocks(selectedBlocks);
+                .WithActiveBlocks(selectedBlocks)
+                .WithComboState(comboState)
+                .WithRescueCount(newRescueCount);
 
             var slotIds = selectedBlocks.GetSlotIds();
             System.Diagnostics.Debug.WriteLine(
-                $"[GameEngine.TryContinueAfterGameOver] Success. Slots: [{slotIds[0]}, {slotIds[1]}, {slotIds[2]}], IsGameOver={CurrentState.IsGameOver}");
+                $"[GameEngine.TryContinueAfterGameOver] Success. Slots: [{slotIds[0]}, {slotIds[1]}, {slotIds[2]}], IsGameOver={CurrentState.IsGameOver}, RescueCount={CurrentState.RescueCount}");
 
             OnStateChanged();
             return true;
@@ -616,11 +638,16 @@ namespace BlockPuzzle.Core.Engine
             // Aktif bloklardan colorId'yi bul
             if (CurrentState.ActiveBlocks.HasBlockAt(activeBlockIndex))
             {
-                // NewSimpleBlock objesinden colorId alınmalı, burada ActiveBlocks'tan alınamıyorsa
-                // colorId = ... (gerekirse eklenir)
-                // Şimdilik slot index ile uyumlu olarak 1-based
                 colorId = CurrentState.ActiveBlocks.GetColorId(activeBlockIndex);
             }
+
+            // Compute placedPositions
+            var placedPositions = new List<Int2>(shape.Offsets.Length);
+            for (int i = 0; i < shape.Offsets.Length; i++)
+            {
+                placedPositions.Add(new Int2(boardPosition.X + shape.Offsets[i].X, boardPosition.Y + shape.Offsets[i].Y));
+            }
+
             // Place the block using static PlacementEngine
             PlacementEngine.PlaceAtomic(
                 CurrentState.Board, 
@@ -642,7 +669,6 @@ namespace BlockPuzzle.Core.Engine
             // Track lines cleared for return value
             int totalLinesCleared = 0;
             Int2[] clearedPositions = Array.Empty<Int2>();
-            var scoreResult = ScoreResult.Empty;
             
             // Check for line clears using static LineDetector
             var lineResult = LineDetector.DetectFullLines(CurrentState.Board);
@@ -664,31 +690,35 @@ namespace BlockPuzzle.Core.Engine
                 CurrentState = CurrentState.WithLinesCleared(totalLinesCleared);
                 
                 OnLinesCleared(clearResult);
-                
-                // Update combo and calculate score
-                var newCombo = CurrentState.ComboState.IncrementCombo();
-                CurrentState = CurrentState.WithComboState(newCombo);
-                
-                scoreResult = ScoringRules.CalculateScore(totalLinesCleared, newCombo, _scoreConfig);
-                int nextScore = AddScoreSafely(CurrentState.Score, scoreResult.ScoreDelta);
-                CurrentState = CurrentState.WithScore(nextScore);
-                
-                OnScoreChanged(scoreResult);
             }
-            else
-            {
-                // Allow one setup move before the combo fully breaks.
-                var newCombo = CurrentState.ComboState.ConsumeNonClearMove();
-                CurrentState = CurrentState.WithComboState(newCombo);
-                scoreResult = ScoringRules.CalculatePlacementScore(newCombo, placedCount, _scoreConfig);
 
-                if (scoreResult.ScoreDelta > 0)
-                {
-                    int nextScore = AddScoreSafely(CurrentState.Score, scoreResult.ScoreDelta);
-                    CurrentState = CurrentState.WithScore(nextScore);
-                    OnScoreChanged(scoreResult);
-                }
-            }
+            // Calculate score using 3.0 ScoringRules
+            int comboCount = CurrentState.Combo;
+            bool graceUsed = CurrentState.ComboState.GraceUsed;
+
+            ScoreBreakdown breakdown = ScoringRules.CalculateMoveScore(
+                CurrentState.Board,
+                placedCount,
+                totalLinesCleared,
+                placedPositions,
+                CurrentState.Mode,
+                ref comboCount,
+                ref graceUsed
+            );
+
+            // Update ComboState
+            var comboState = CurrentState.ComboState.Clone();
+            comboState.SetStreak(comboCount);
+            comboState.GraceUsed = graceUsed;
+            CurrentState = CurrentState.WithComboState(comboState);
+
+            // Update Score
+            int nextScore = AddScoreSafely(CurrentState.Score, breakdown.TotalGained);
+            CurrentState = CurrentState.WithScore(nextScore);
+
+            // Construct ScoreResult and notify
+            var scoreResult = new ScoreResult(breakdown, _scoreConfig.FormulaVersion);
+            OnScoreChanged(scoreResult);
             
             // Increment move count
             CurrentState = CurrentState.WithIncrementedMoveCount();

@@ -42,5 +42,10 @@ namespace BlockPuzzle.Core.Common
             // Keep errors visible in all builds.
             Trace.TraceError(message);
         }
+
+        public static void LogException(System.Exception exception)
+        {
+            Trace.TraceError(exception?.ToString() ?? "null exception");
+        }
     }
 }

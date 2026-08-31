@@ -37,7 +37,7 @@ namespace BlockPuzzle.Core.Tests.Persistence
 
             Assert.IsTrue(move1.Success);
             Assert.IsTrue(move2.Success);
-            Assert.AreEqual(46, engine.CurrentState.Score);
+            Assert.AreEqual(792, engine.CurrentState.Score);
             Assert.AreEqual(2, engine.CurrentState.ComboState.Streak);
 
             const int formulaVersion = 9;

@@ -1,175 +1,231 @@
-// File: Core/Rules/ScoringRules.cs
 using System;
+using System.Collections.Generic;
+using BlockPuzzle.Core.Board;
+using BlockPuzzle.Core.Common;
 
 namespace BlockPuzzle.Core.Rules
 {
     /// <summary>
-    /// Defines the scoring rules for the Blok Dünyası game.
-    /// 
-    /// Scoring behavior is fully config-driven via <see cref="ScoreConfig"/>:
-    /// - Line clear score uses base points per line with line + combo multipliers.
-    /// - Legal no-clear placements can still award placement points.
-    /// - Rounding mode and formula version are also taken from config.
+    /// Defines the scoring rules for the Blok Dünyası game (Version 3.0).
     /// </summary>
     public static class ScoringRules
     {
         private static ScoreConfig _defaultConfig = ScoreConfig.Default;
 
-        /// <summary>
-        /// Active default score configuration.
-        /// </summary>
         public static ScoreConfig DefaultConfig => _defaultConfig;
 
-        /// <summary>
-        /// Replaces the default score configuration used by overloads without explicit config.
-        /// </summary>
         public static void SetDefaultConfig(ScoreConfig config)
         {
             _defaultConfig = config ?? ScoreConfig.Default;
         }
-        
-        /// <summary>
-        /// Calculates score for a move with line clears.
-        /// </summary>
-        /// <param name="linesCleared">Number of lines cleared this move</param>
-        /// <param name="comboState">Current combo state</param>
-        /// <returns>Score result with detailed breakdown</returns>
-        /// <exception cref="ArgumentNullException">If comboState is null</exception>
-        public static ScoreResult CalculateScore(int linesCleared, ComboState comboState)
-        {
-            return CalculateScore(linesCleared, comboState, _defaultConfig);
-        }
 
         /// <summary>
-        /// Calculates score for a move with line clears using a specific score configuration.
+        /// Calculates score and updates combo state for a move.
         /// </summary>
-        /// <param name="linesCleared">Number of lines cleared this move</param>
-        /// <param name="comboState">Current combo state</param>
-        /// <param name="scoreConfig">Score formula config</param>
-        /// <returns>Score result with detailed breakdown</returns>
-        /// <exception cref="ArgumentNullException">If comboState or scoreConfig is null</exception>
-        public static ScoreResult CalculateScore(int linesCleared, ComboState comboState, ScoreConfig scoreConfig)
+        public static ScoreBreakdown CalculateMoveScore(
+            BoardState board,
+            int placedCellCount,
+            int linesCleared,
+            IReadOnlyList<Int2> placedPositions,
+            GameMode mode,
+            ref int comboCount,
+            ref bool graceUsed
+        )
         {
-            if (comboState == null)
-                throw new ArgumentNullException(nameof(comboState));
-            if (scoreConfig == null)
-                throw new ArgumentNullException(nameof(scoreConfig));
-            
-            if (linesCleared < 0)
-                throw new ArgumentException("Lines cleared cannot be negative", nameof(linesCleared));
-            
-            // No lines cleared = no score
-            if (linesCleared == 0)
+            int riskBonus = 0;
+            bool isEdge = false;
+            bool isCorner = false;
+
+            if (board != null && placedPositions != null && placedPositions.Count > 0)
             {
-                return CalculatePlacementScore(comboState, scoreConfig);
-            }
-            
-            // Calculate base score with saturation for defensive safety.
-            long baseScoreLong = (long)linesCleared * scoreConfig.BasePointsPerLine;
-            if (linesCleared >= 3)
-                baseScoreLong += scoreConfig.MultiLineFinisherBonus;
-            if (comboState.Streak >= 6)
-                baseScoreLong += scoreConfig.HighComboClearBonus;
-            int baseScore = baseScoreLong > int.MaxValue ? int.MaxValue : (int)baseScoreLong;
-            
-            // Line clear multiplier for simultaneous clears
-            float lineClearMultiplier = scoreConfig.EvaluateLineMultiplier(linesCleared);
-            float comboMultiplier = scoreConfig.EvaluateComboMultiplier(comboState.Streak);
-            
-            int finalScore = CalculateFinalScore(baseScore, lineClearMultiplier, comboMultiplier, scoreConfig);
-            
-            return new ScoreResult(
-                scoreDelta: finalScore,
-                linesCleared: linesCleared,
-                comboStreak: comboState.Streak,
-                comboMultiplier: comboMultiplier,
-                baseScore: baseScore,
-                lineClearMultiplier: lineClearMultiplier,
-                formulaVersion: scoreConfig.FormulaVersion
-            );
-        }
-
-        /// <summary>
-        /// Calculates score for a legal placement that does not clear lines.
-        /// Keeps score flow active to avoid dead turns while preserving combo reset behavior.
-        /// </summary>
-        public static ScoreResult CalculatePlacementScore(ComboState comboState)
-        {
-            return CalculatePlacementScore(comboState, placedCellCount: 1, _defaultConfig);
-        }
-
-        /// <summary>
-        /// Calculates score for a legal placement that does not clear lines using a specific config.
-        /// </summary>
-        public static ScoreResult CalculatePlacementScore(ComboState comboState, ScoreConfig scoreConfig)
-        {
-            return CalculatePlacementScore(comboState, placedCellCount: 1, scoreConfig);
-        }
-
-        /// <summary>
-        /// Calculates score for a legal placement that does not clear lines using a specific config and placed cell count.
-        /// </summary>
-        public static ScoreResult CalculatePlacementScore(ComboState comboState, int placedCellCount, ScoreConfig scoreConfig)
-        {
-            if (comboState == null)
-                throw new ArgumentNullException(nameof(comboState));
-            if (scoreConfig == null)
-                throw new ArgumentNullException(nameof(scoreConfig));
-
-            int safePlacedCellCount = placedCellCount <= 0 ? 1 : placedCellCount;
-            bool isHighRiskPlacement = comboState.Streak >= 2;
-            long riskBonus = isHighRiskPlacement ? scoreConfig.HighRiskPlacementBonus : 0L;
-            long placementBaseLong = scoreConfig.BasePointsPerPlacement +
-                                     ((long)scoreConfig.BasePointsPerPlacedCell * safePlacedCellCount) +
-                                     riskBonus;
-            int baseScore = placementBaseLong >= int.MaxValue ? int.MaxValue : (int)placementBaseLong;
-
-            if (baseScore <= 0)
-            {
-                return new ScoreResult(
-                    scoreDelta: 0,
-                    linesCleared: 0,
-                    comboStreak: comboState.Streak,
-                    comboMultiplier: scoreConfig.EvaluateComboMultiplier(comboState.Streak),
-                    baseScore: 0,
-                    lineClearMultiplier: 1.0f,
-                    formulaVersion: scoreConfig.FormulaVersion);
+                riskBonus = CalculateRiskBonus(board, placedPositions, out isEdge, out isCorner);
             }
 
-            float placementComboMultiplier = 1.0f + (comboState.Streak * scoreConfig.PlacementComboStepMultiplier);
-            if (placementComboMultiplier > scoreConfig.PlacementComboMaxMultiplier)
-                placementComboMultiplier = scoreConfig.PlacementComboMaxMultiplier;
+            int placementScore = 0;
+            int lineClearScore = 0;
+            int comboBonus = 0;
+            bool usedGrace = false;
+            bool comboBroken = false;
 
-            int finalScore = CalculateFinalScore(baseScore, lineClearMultiplier: 1.0f, comboMultiplier: placementComboMultiplier, scoreConfig);
-            return new ScoreResult(
-                scoreDelta: finalScore,
-                linesCleared: 0,
-                comboStreak: comboState.Streak,
-                comboMultiplier: placementComboMultiplier,
-                baseScore: baseScore,
-                lineClearMultiplier: 1.0f,
-                formulaVersion: scoreConfig.FormulaVersion);
-        }
-
-        private static int CalculateFinalScore(int baseScore, float lineClearMultiplier, float comboMultiplier, ScoreConfig scoreConfig)
-        {
-            float totalMultiplier = lineClearMultiplier * comboMultiplier;
-            if (totalMultiplier < 0f || float.IsNaN(totalMultiplier) || float.IsInfinity(totalMultiplier))
-                throw new InvalidOperationException("Calculated score multiplier is invalid.");
-
-            double rawScore = baseScore * (double)totalMultiplier;
-            long roundedScore = scoreConfig.RoundingMode switch
+            if (linesCleared > 0)
             {
-                ScoreRoundingMode.Floor => (long)Math.Floor(rawScore),
-                ScoreRoundingMode.Ceiling => (long)Math.Ceiling(rawScore),
-                ScoreRoundingMode.Truncate => (long)Math.Truncate(rawScore),
-                _ => (long)Math.Round(rawScore)
+                comboCount += 1;
+                graceUsed = false;
+                lineClearScore = GetLineClearBaseScore(linesCleared);
+                
+                int effectiveCombo = Math.Min(comboCount, 25);
+                comboBonus = effectiveCombo * 100 * linesCleared;
+
+                if (mode == GameMode.Zen)
+                {
+                    lineClearScore = (int)Math.Floor(lineClearScore * 0.7f);
+                    comboBonus = (int)Math.Floor(comboBonus * 0.7f);
+                }
+            }
+            else
+            {
+                placementScore = placedCellCount * 25;
+                if (mode == GameMode.Zen)
+                {
+                    placementScore *= 2;
+                }
+
+                if (comboCount > 0)
+                {
+                    if (!graceUsed)
+                    {
+                        graceUsed = true;
+                        usedGrace = true;
+                    }
+                    else
+                    {
+                        comboCount = 0;
+                        graceUsed = false;
+                        comboBroken = true;
+                    }
+                }
+            }
+
+            int totalGained = placementScore + lineClearScore + comboBonus + riskBonus;
+
+            return new ScoreBreakdown
+            {
+                PlacementScore = placementScore,
+                LineClearScore = lineClearScore,
+                ComboBonus = comboBonus,
+                RiskBonus = riskBonus,
+                TotalGained = totalGained,
+                LinesCleared = linesCleared,
+                ComboCount = comboCount,
+                UsedGrace = usedGrace,
+                ComboBroken = comboBroken,
+                IsEdgeBonus = isEdge,
+                IsCornerBonus = isCorner
             };
+        }
 
-            if (roundedScore <= 0L)
+        /// <summary>
+        /// Gets the base score for the number of lines cleared.
+        /// </summary>
+        public static int GetLineClearBaseScore(int linesCleared)
+        {
+            if (linesCleared <= 0) return 0;
+            return linesCleared switch
+            {
+                1 => 300,
+                2 => 800,
+                3 => 1400,
+                4 => 2200,
+                _ => 3000
+            };
+        }
+
+        /// <summary>
+        /// Calculates risk bonus (edge or corner) for placed cells.
+        /// </summary>
+        public static int CalculateRiskBonus(BoardState board, IReadOnlyList<Int2> placedPositions, out bool isEdge, out bool isCorner)
+        {
+            isEdge = false;
+            isCorner = false;
+
+            if (board == null || placedPositions == null || placedPositions.Count == 0)
                 return 0;
 
-            return roundedScore >= int.MaxValue ? int.MaxValue : (int)roundedScore;
+            bool touchesHorizontal = false;
+            bool touchesVertical = false;
+            int edgeTouchCount = 0;
+
+            for (int i = 0; i < placedPositions.Count; i++)
+            {
+                int x = placedPositions[i].X;
+                int y = placedPositions[i].Y;
+
+                bool onHoriz = (x == 0 || x == board.Width - 1);
+                bool onVert = (y == 0 || y == board.Height - 1);
+
+                if (onHoriz) touchesHorizontal = true;
+                if (onVert) touchesVertical = true;
+
+                if (onHoriz || onVert)
+                {
+                    edgeTouchCount++;
+                }
+            }
+
+            if (touchesHorizontal && touchesVertical)
+            {
+                isCorner = true;
+                return 40;
+            }
+
+            if (edgeTouchCount >= 2)
+            {
+                isEdge = true;
+                return 20;
+            }
+
+            return 0;
+        }
+
+        // Backward compatibility overloads for testing and old API calls:
+        public static ScoreResult CalculateScore(int linesCleared, ComboState comboState)
+        {
+            int comboCount = comboState.Streak;
+            bool graceUsed = comboState.GraceUsed;
+            var breakdown = CalculateMoveScore(null, 0, linesCleared, null, GameMode.Classic, ref comboCount, ref graceUsed);
+            
+            // Apply ref modifications back to comboState:
+            if (linesCleared > 0)
+            {
+                comboState.IncrementCombo();
+            }
+            else
+            {
+                comboState.ConsumeNonClearMove();
+            }
+
+            return new ScoreResult(breakdown);
+        }
+
+        public static ScoreResult CalculateScore(int linesCleared, ComboState comboState, ScoreConfig scoreConfig)
+        {
+            int comboCount = comboState.Streak;
+            bool graceUsed = comboState.GraceUsed;
+            var breakdown = CalculateMoveScore(null, 0, linesCleared, null, GameMode.Classic, ref comboCount, ref graceUsed);
+            
+            // Apply ref modifications back to comboState:
+            if (linesCleared > 0)
+            {
+                comboState.IncrementCombo();
+            }
+            else
+            {
+                comboState.ConsumeNonClearMove();
+            }
+
+            return new ScoreResult(breakdown, scoreConfig != null ? scoreConfig.FormulaVersion : ScoreConfig.DefaultFormulaVersion);
+        }
+
+        public static ScoreResult CalculatePlacementScore(ComboState comboState)
+        {
+            return CalculatePlacementScore(comboState, 1, _defaultConfig);
+        }
+
+        public static ScoreResult CalculatePlacementScore(ComboState comboState, ScoreConfig scoreConfig)
+        {
+            return CalculatePlacementScore(comboState, 1, scoreConfig);
+        }
+
+        public static ScoreResult CalculatePlacementScore(ComboState comboState, int placedCellCount, ScoreConfig scoreConfig)
+        {
+            int comboCount = comboState.Streak;
+            bool graceUsed = comboState.GraceUsed;
+            var breakdown = CalculateMoveScore(null, placedCellCount, 0, null, GameMode.Classic, ref comboCount, ref graceUsed);
+            
+            // Apply ref modifications back to comboState:
+            comboState.ConsumeNonClearMove();
+
+            return new ScoreResult(breakdown);
         }
     }
 }

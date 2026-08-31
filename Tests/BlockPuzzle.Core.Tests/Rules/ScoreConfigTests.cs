@@ -67,12 +67,9 @@ namespace BlockPuzzle.Core.Tests.Rules
 
             var result = ScoringRules.CalculateScore(2, combo, config);
 
-            // base=40, line=1.4, combo=1.5 => 83.999... and Floor => 83
-            Assert.AreEqual(83, result.ScoreDelta);
+            // base=800, combo=4*100*2 = 800 => 1600
+            Assert.AreEqual(1600, result.ScoreDelta);
             Assert.AreEqual(5, result.FormulaVersion);
-            Assert.AreEqual(40, result.BaseScore);
-            Assert.AreEqual(1.4f, result.LineClearMultiplier, 0.0001f);
-            Assert.AreEqual(1.5f, result.ComboMultiplier, 0.0001f);
         }
     }
 }

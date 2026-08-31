@@ -143,7 +143,7 @@ namespace BlockPuzzle.Core.Tests.Engine
             Assert.IsTrue(snapshot.ActiveBlocks.HasBlockAt(0));
             Assert.AreEqual(0, snapshot.Score);
             Assert.IsTrue(engine.CurrentState.Board.IsEmpty(0, 0));
-            Assert.AreEqual(20, engine.CurrentState.Score);
+            Assert.AreEqual(312, engine.CurrentState.Score);
         }
 
         [Test]

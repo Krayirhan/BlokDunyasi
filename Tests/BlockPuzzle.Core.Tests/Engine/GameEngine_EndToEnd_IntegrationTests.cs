@@ -40,13 +40,13 @@ namespace BlockPuzzle.Core.Tests.Engine
 
             Assert.IsTrue(move1.Success);
             Assert.AreEqual(1, move1.LinesCleared);
-            Assert.AreEqual(20, move1.ScoreDelta);
+            Assert.AreEqual(312, move1.ScoreDelta);
 
             Assert.IsTrue(move2.Success);
             Assert.AreEqual(1, move2.LinesCleared);
-            Assert.AreEqual(26, move2.ScoreDelta, "Second clear should apply the stronger combo multiplier.");
+            Assert.AreEqual(480, move2.ScoreDelta, "Second clear should apply the stronger combo multiplier.");
 
-            Assert.AreEqual(46, engine.CurrentState.Score);
+            Assert.AreEqual(792, engine.CurrentState.Score);
             Assert.AreEqual(2, engine.CurrentState.ComboState.Streak);
 
             // Prepare an explicit no-placement state to validate game-over detection.

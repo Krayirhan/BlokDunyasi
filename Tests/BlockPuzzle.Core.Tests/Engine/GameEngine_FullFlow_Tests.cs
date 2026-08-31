@@ -43,7 +43,7 @@ namespace BlockPuzzle.Core.Tests.Engine
             Assert.IsTrue(move3.Success);
             Assert.IsTrue(move3.TriggersSpawn);
 
-            Assert.AreEqual(28, engine.CurrentState.Score);
+            Assert.AreEqual(383, engine.CurrentState.Score);
             Assert.AreEqual(0, engine.CurrentState.ComboState.Streak);
             Assert.AreEqual(3, engine.CurrentState.MoveCount);
             Assert.IsTrue(engine.CurrentState.ActiveBlocks.IsFull);

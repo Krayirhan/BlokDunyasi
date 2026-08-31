@@ -6,6 +6,7 @@ using BlockPuzzle.Core.Engine;
 using BlockPuzzle.Core.RNG;
 using BlockPuzzle.Core.Rules;
 using BlockPuzzle.Core.Shapes;
+using CoreGameMode = BlockPuzzle.Core.Common.GameMode;
 
 namespace BlockPuzzle.Core.Persistence
 {
@@ -87,6 +88,16 @@ namespace BlockPuzzle.Core.Persistence
         /// Total number of moves made.
         /// </summary>
         public int MoveCount { get; set; }
+
+        /// <summary>
+        /// Number of rescues/continues used.
+        /// </summary>
+        public int RescueCount { get; set; }
+
+        /// <summary>
+        /// Selected Game Mode.
+        /// </summary>
+        public string GameMode { get; set; }
         
         /// <summary>
         /// Total lines cleared.
@@ -167,6 +178,8 @@ namespace BlockPuzzle.Core.Persistence
                 ActiveBlockSlots = gameState.ActiveBlocks.GetSlotIds(),
                 ActiveBlockColorIds = activeBlockColorIds,
                 MoveCount = gameState.MoveCount,
+                RescueCount = gameState.RescueCount,
+                GameMode = gameState.Mode.ToString(),
                 TotalLinesCleared = gameState.TotalLinesCleared,
                 GameStartTime = gameState.StartTime,
                 LastMoveTime = gameState.LastMoveTime,
@@ -241,7 +254,14 @@ namespace BlockPuzzle.Core.Persistence
         {
             MigrateToCurrentInPlace();
 
-            var gameState = new GameState(BoardWidth, BoardHeight);
+            var mode = CoreGameMode.Classic;
+            if (!string.IsNullOrEmpty(GameMode) && Enum.TryParse<CoreGameMode>(GameMode, out var parsedMode))
+            {
+                mode = parsedMode;
+            }
+
+            var gameState = new GameState(BoardWidth, BoardHeight, mode);
+            gameState = gameState.WithRescueCount(RescueCount);
             
             // Restore board cells
             gameState.Board.SetCells(BoardCells);

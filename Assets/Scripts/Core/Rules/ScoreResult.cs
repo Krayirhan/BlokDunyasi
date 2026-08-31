@@ -43,6 +43,11 @@ namespace BlockPuzzle.Core.Rules
         public readonly int FormulaVersion;
 
         /// <summary>
+        /// Detailed score breakdown for scoring 3.0.
+        /// </summary>
+        public readonly ScoreBreakdown Breakdown;
+
+        /// <summary>
         /// Total multiplier applied to the base score.
         /// </summary>
         public float TotalMultiplier => ComboMultiplier * LineClearMultiplier;
@@ -67,6 +72,35 @@ namespace BlockPuzzle.Core.Rules
             BaseScore = baseScore;
             LineClearMultiplier = lineClearMultiplier;
             FormulaVersion = formulaVersion;
+            Breakdown = new ScoreBreakdown
+            {
+                PlacementScore = linesCleared == 0 ? scoreDelta : 0,
+                LineClearScore = linesCleared > 0 ? baseScore : 0,
+                ComboBonus = 0,
+                RiskBonus = 0,
+                TotalGained = scoreDelta,
+                LinesCleared = linesCleared,
+                ComboCount = comboStreak,
+                UsedGrace = false,
+                ComboBroken = false,
+                IsEdgeBonus = false,
+                IsCornerBonus = false
+            };
+        }
+
+        /// <summary>
+        /// Creates a score result from a 3.0 ScoreBreakdown.
+        /// </summary>
+        public ScoreResult(ScoreBreakdown breakdown, int formulaVersion = ScoreConfig.DefaultFormulaVersion)
+        {
+            ScoreDelta = breakdown.TotalGained;
+            LinesCleared = breakdown.LinesCleared;
+            ComboStreak = breakdown.ComboCount;
+            ComboMultiplier = 1.0f;
+            BaseScore = breakdown.LineClearScore + breakdown.PlacementScore;
+            LineClearMultiplier = 1.0f;
+            FormulaVersion = formulaVersion;
+            Breakdown = breakdown;
         }
         
         /// <summary>

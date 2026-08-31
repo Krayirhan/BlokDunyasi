@@ -30,5 +30,6 @@ namespace BlockPuzzle.Core.Common
         public const string AdPolicyBanMatchesLeft = "AdPolicy_BanMatchesLeft";
         public const string UpdateLastPromptUnixSeconds = "update_last_prompt_unix_seconds";
         public const string UpdateLastPromptedVersion = "update_last_prompted_version";
+        public const string UpdateReminderStoreVersion = "update_reminder_store_version";
     }
 }

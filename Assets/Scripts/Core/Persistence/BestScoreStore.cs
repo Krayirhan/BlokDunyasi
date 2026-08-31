@@ -39,6 +39,18 @@ namespace BlockPuzzle.Core.Persistence
                 _storage.Save();
             }
         }
+
+        /// <summary>
+        /// Sets the best score unconditionally, even if lower than current.
+        /// Used for remote/admin score overrides from Firestore.
+        /// </summary>
+        public void ForceSetBestScore(int score)
+        {
+            _cachedBestScore = score;
+            _cacheValid = true;
+            _storage.SaveInt(BEST_SCORE_KEY, score);
+            _storage.Save();
+        }
         
         public bool TryUpdateBestScore(int newScore)
         {

@@ -17,6 +17,7 @@ namespace BlockPuzzle.UnityAdapter.Boot
         public readonly float TotalMultiplier;
         public readonly int FormulaVersion;
         public readonly bool IsNewBest;
+        public readonly ScoreBreakdown Breakdown;
 
         public ScoreBreakdownInfo(ScoreResult scoreResult, int totalScore, bool isNewBest)
         {
@@ -30,6 +31,7 @@ namespace BlockPuzzle.UnityAdapter.Boot
             TotalMultiplier = scoreResult.TotalMultiplier;
             FormulaVersion = scoreResult.FormulaVersion;
             IsNewBest = isNewBest;
+            Breakdown = scoreResult.Breakdown;
         }
     }
 }
