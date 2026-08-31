@@ -149,7 +149,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BlockPuzzle.UnityAdapter.Blocks.SimpleBlockTray
   spriteConfig: {fileID: 11400000, guid: 4067718b5b09ddb4ba5795800a8b4cbe, type: 2}
+  _gameBootstrap: {fileID: 1266623528}
   gridView: {fileID: 1058521193}
+  trayLayoutCamera: {fileID: 1095980012}
   blockCellSize: 0.6
   blockCellSpacing: 0
   trayCellSpacing: 0.07
@@ -166,7 +168,7 @@ MonoBehaviour:
   dragBrightnessMultiplier: 1.2
   normalAlpha: 1
   dragAlpha: 0.96
-  trayBlockScale: 0.9
+  trayBlockScale: 0.85
   slotPositions:
   - {x: -2.0260096, y: -7.37875, z: 0}
   - {x: -0.00000011920929, y: -7.37875, z: 0}
@@ -189,6 +191,7 @@ MonoBehaviour:
   trayBackdropBorderThicknessInWorld: 0.017
   trayBackdropSortingOrder: 4
   trayBackdropBorderSortingOrder: 5
+  verboseLogs: 0
   driveManualUiBackdrop: 0
   manualUiBackdrop: {fileID: 0}
   manualUiBackdropCanvas: {fileID: 0}
@@ -484,7 +487,7 @@ MonoBehaviour:
   m_VertexBufferAutoSizeReduction: 0
   m_useMaxVisibleDescender: 1
   m_pageToDisplay: 1
-  m_margin: {x: 0, y: 0, z: -91.5179, w: 0}
+  m_margin: {x: -0.000015258789, y: 0, z: -91.5179, w: 0}
   m_isUsingLegacyAnimationComponent: 0
   m_isVolumetricText: 0
   m_hasFontAssetChanged: 0
@@ -1228,7 +1231,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: -1.5, z: 10}
-  m_LocalScale: {x: 0.069344126, y: 0.069344126, z: 1}
+  m_LocalScale: {x: 0.86405504, y: 0.86405504, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1266623529}
@@ -1280,12 +1283,12 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: -200
-  m_Sprite: {fileID: 2328869001408634272, guid: 57021d22ed566f34da242c9b6e861197, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 3559876ef69b32645bfcd49deb6215e4, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 67.50001, y: 120.00001}
+  m_Size: {x: 9.41, y: 16.72}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -1328,14 +1331,14 @@ MonoBehaviour:
   maxFloatingTextPoolSize: 20
   persistAcrossScenes: 0
   vfxPreset:
-    cameraShakeDuration: 0
-    cameraShakeIntensity: 0
-    lineClearParticleCount: 30
-    lineClearParticleLifetime: 0.96
-    lineClearParticleSize: 0.63
+    cameraShakeDuration: 0.1
+    cameraShakeIntensity: 0.35
+    lineClearParticleCount: 28
+    lineClearParticleLifetime: 0.8
+    lineClearParticleSize: 0.1
     lineClearParticleSpeedMin: 2
     lineClearParticleSpeedMax: 5
-    placementDustCount: 40
+    placementDustCount: 5
     placementDustLifetime: 0.5
     gridCellGlowDuration: 0.3
   blockBreakParticleCount: 24
@@ -1946,6 +1949,37 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 434305160}
   m_CullTransparentMesh: 1
+--- !u!1 &439341503
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 439341504}
+  m_Layer: 0
+  m_Name: DeferredPlayerPrefsSaver
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &439341504
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 439341503}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &455444567
 GameObject:
   m_ObjectHideFlags: 0
@@ -2121,7 +2155,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 12, y: 885}
+  m_AnchoredPosition: {x: -268, y: 885}
   m_SizeDelta: {x: 256.2, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &483707819
@@ -2137,7 +2171,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 0, g: 0.050980397, b: 0.18039216, a: 0.85}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -2246,7 +2280,9 @@ MonoBehaviour:
   textComponent: {fileID: 509776818}
   turkishText: "Reklam izlemek i\xE7in 5 saniyen var"
   englishText: You have 5 seconds to watch the ad
+  koreanText: "\uAD11\uACE0 \uC2DC\uCCAD\uAE4C\uC9C0 5\uCD08 \uB0A8\uC558\uC2B5\uB2C8\uB2E4"
   useNameIfEmpty: 0
+  useKoreanFont: 1
 --- !u!114 &509776818
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2400,7 +2436,9 @@ MonoBehaviour:
   textComponent: {fileID: 528991165}
   turkishText: Ana Menu
   englishText: Main Menu
+  koreanText: "\uBA54\uC778 \uBA54\uB274"
   useNameIfEmpty: 0
+  useKoreanFont: 1
 --- !u!114 &528991165
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2423,8 +2461,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: Ana Menu
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 23f45ef339bad2947b41ae7c1838204d, type: 2}
+  m_sharedMaterial: {fileID: 401957184552901167, guid: 23f45ef339bad2947b41ae7c1838204d, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -2451,11 +2489,11 @@ MonoBehaviour:
   m_fontSize: 28
   m_fontSizeBase: 28
   m_fontWeight: 400
-  m_enableAutoSizing: 1
+  m_enableAutoSizing: 0
   m_fontSizeMin: 16
   m_fontSizeMax: 28
-  m_fontStyle: 1
-  m_HorizontalAlignment: 1
+  m_fontStyle: 0
+  m_HorizontalAlignment: 2
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
@@ -2467,7 +2505,7 @@ MonoBehaviour:
   m_charWidthMaxAdj: 0
   m_TextWrappingMode: 0
   m_wordWrappingRatios: 0.4
-  m_overflowMode: 3
+  m_overflowMode: 0
   m_linkedTextComponent: {fileID: 0}
   parentLinkedComponent: {fileID: 0}
   m_enableKerning: 0
@@ -2530,6 +2568,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d915be2c3dced5d4dbd4ae45b167e36d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BlockPuzzle.UnityAdapter.Input.NewDragSystem
+  _cam: {fileID: 1095980012}
+  _bootstrap: {fileID: 1266623528}
   blockTray: {fileID: 2711578}
   gridView: {fileID: 1058521193}
   pickRadius: 1.2
@@ -2540,7 +2580,6 @@ MonoBehaviour:
   touchGridSnapVisualBlend: 0
   mouseGridSnapVisualBlend: 0
   visualSnapRangeInCells: 0.8
-  overGridLiftMultiplier: 0.55
   fingerOffsetY: 0.8
   touchDragLiftMultiplier: 0.35
   pickupPointLocalOffset: {x: 0, y: 0}
@@ -3152,7 +3191,9 @@ MonoBehaviour:
   textComponent: {fileID: 667759110}
   turkishText: "Hamlen Kalmad\u0131!"
   englishText: No Moves Left!
+  koreanText: "\uB354 \uC774\uC0C1 \uC6C0\uC9C1\uC77C \uC218 \uC5C6\uC2B5\uB2C8\uB2E4!"
   useNameIfEmpty: 0
+  useKoreanFont: 1
 --- !u!114 &667759109
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4174,7 +4215,7 @@ MonoBehaviour:
   useRoundedEmptyCellSprite: 1
   emptyCellCornerRadius: 0.22
   filledCellScale: 1.123
-  useFlatFilledCellTint: 1
+  useFlatFilledCellTint: 0
   useFilledCellTintOverride: 0
   filledCellTintOverride: {r: 1, g: 1, b: 1, a: 1}
   useRoundedFilledCellSprite: 0
@@ -4186,7 +4227,6 @@ MonoBehaviour:
   gridOffset: {x: 0, y: 0}
   cellSize: 0.632
   cellSpacing: 0.113
-  useRuntimeResponsiveLayout: 1
   showBoardBackdrop: 1
   customBackdropSprite: {fileID: 0}
   useRoundedBackdropSprite: 1
@@ -4202,7 +4242,6 @@ MonoBehaviour:
   dropPreviewAlpha: 0.68
   dropPreviewScale: 1
   dropPreviewBrightness: 1
-  useRoundedDropPreviewSprite: 1
   dropPreviewCornerRadius: 0.18
   dropPreviewSortingOrder: 30
   enableLineClearPreviewPulse: 1
@@ -4309,7 +4348,7 @@ Camera:
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 2
-  m_BackGroundColor: {r: 0.16, g: 0.24, b: 0.38, a: 1}
+  m_BackGroundColor: {r: 0.055, g: 0.082, b: 0.141, a: 1}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -4821,10 +4860,10 @@ MonoBehaviour:
   canvasMatchWidthOrHeight: 0.5
   useWorldBackgroundLayer: 1
   preserveAuthoredWorldBackground: 1
-  gameplayBackgroundSpriteOverride: {fileID: 2328869001408634272, guid: 57021d22ed566f34da242c9b6e861197, type: 3}
+  gameplayBackgroundSpriteOverride: {fileID: 21300000, guid: 3559876ef69b32645bfcd49deb6215e4, type: 3}
   gameplayBackgroundTint: {r: 1, g: 1, b: 1, a: 1}
   gameplayBackgroundDimmerColor: {r: 0.07, g: 0.14, b: 0.22, a: 0.32}
-  gameplayCameraClearColor: {r: 0.16, g: 0.24, b: 0.38, a: 1}
+  gameplayCameraClearColor: {r: 0.055, g: 0.082, b: 0.141, a: 1}
   legacyOverlayBackgroundAlpha: 0
   worldBackgroundSortingOrder: -200
   worldDimmerSortingOrder: -150
@@ -4865,7 +4904,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &1324257507
 Transform:
   m_ObjectHideFlags: 0
@@ -4876,7 +4915,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: -1.5, z: 9.5}
-  m_LocalScale: {x: 8.126437, y: 14.447, z: 1}
+  m_LocalScale: {x: 6.677447, y: 14.447, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1266623529}
@@ -4929,14 +4968,14 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: -150
   m_Sprite: {fileID: 0}
-  m_Color: {r: 0, g: 0.30980393, b: 0.36862746, a: 0.34}
+  m_Color: {r: 0.07, g: 0.14, b: 0.22, a: 0.32}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
   m_Size: {x: 1, y: 1}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 1
+  m_WasSpriteAssigned: 0
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!1 &1348319755
@@ -5067,7 +5106,9 @@ MonoBehaviour:
   textComponent: {fileID: 1408512402}
   turkishText: 5 SN
   englishText: 5 SEC
+  koreanText: "5\uCD08"
   useNameIfEmpty: 0
+  useKoreanFont: 1
 --- !u!114 &1408512401
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5105,8 +5146,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: 5 SN
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 23f45ef339bad2947b41ae7c1838204d, type: 2}
+  m_sharedMaterial: {fileID: 401957184552901167, guid: 23f45ef339bad2947b41ae7c1838204d, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -5133,10 +5174,10 @@ MonoBehaviour:
   m_fontSize: 34
   m_fontSizeBase: 34
   m_fontWeight: 400
-  m_enableAutoSizing: 1
+  m_enableAutoSizing: 0
   m_fontSizeMin: 20
   m_fontSizeMax: 34
-  m_fontStyle: 1
+  m_fontStyle: 0
   m_HorizontalAlignment: 2
   m_VerticalAlignment: 512
   m_textAlignment: 65535
@@ -5149,7 +5190,7 @@ MonoBehaviour:
   m_charWidthMaxAdj: 0
   m_TextWrappingMode: 0
   m_wordWrappingRatios: 0.4
-  m_overflowMode: 3
+  m_overflowMode: 0
   m_linkedTextComponent: {fileID: 0}
   parentLinkedComponent: {fileID: 0}
   m_enableKerning: 0
@@ -5433,7 +5474,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.22352941, g: 1, b: 1, a: 1}
+  m_Color: {r: 0, g: 0.050980397, b: 0.18039216, a: 0.95}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -5511,7 +5552,9 @@ MonoBehaviour:
   textComponent: {fileID: 1591078835}
   turkishText: Tekrar Oyna
   englishText: Play Again
+  koreanText: "\uB2E4\uC2DC \uD558\uAE30"
   useNameIfEmpty: 0
+  useKoreanFont: 1
 --- !u!114 &1591078835
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5534,8 +5577,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: Tekrar Oyna
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 23f45ef339bad2947b41ae7c1838204d, type: 2}
+  m_sharedMaterial: {fileID: 401957184552901167, guid: 23f45ef339bad2947b41ae7c1838204d, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -5562,11 +5605,11 @@ MonoBehaviour:
   m_fontSize: 27.65
   m_fontSizeBase: 28
   m_fontWeight: 400
-  m_enableAutoSizing: 1
+  m_enableAutoSizing: 0
   m_fontSizeMin: 16
   m_fontSizeMax: 28
-  m_fontStyle: 1
-  m_HorizontalAlignment: 1
+  m_fontStyle: 0
+  m_HorizontalAlignment: 2
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
@@ -5578,7 +5621,7 @@ MonoBehaviour:
   m_charWidthMaxAdj: 0
   m_TextWrappingMode: 0
   m_wordWrappingRatios: 0.4
-  m_overflowMode: 3
+  m_overflowMode: 0
   m_linkedTextComponent: {fileID: 0}
   parentLinkedComponent: {fileID: 0}
   m_enableKerning: 0
@@ -5717,7 +5760,9 @@ MonoBehaviour:
   textComponent: {fileID: 1676275917}
   turkishText: "Reklam \u0130zle"
   englishText: Watch Ad
+  koreanText: "\uAD11\uACE0 \uC2DC\uCCAD"
   useNameIfEmpty: 0
+  useKoreanFont: 1
 --- !u!114 &1676275916
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5755,8 +5800,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "Reklam \u0130zle"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 23f45ef339bad2947b41ae7c1838204d, type: 2}
+  m_sharedMaterial: {fileID: 401957184552901167, guid: 23f45ef339bad2947b41ae7c1838204d, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -5783,10 +5828,10 @@ MonoBehaviour:
   m_fontSize: 48.3
   m_fontSizeBase: 58
   m_fontWeight: 400
-  m_enableAutoSizing: 1
+  m_enableAutoSizing: 0
   m_fontSizeMin: 32
   m_fontSizeMax: 58
-  m_fontStyle: 1
+  m_fontStyle: 0
   m_HorizontalAlignment: 2
   m_VerticalAlignment: 512
   m_textAlignment: 65535
@@ -5799,7 +5844,7 @@ MonoBehaviour:
   m_charWidthMaxAdj: 0
   m_TextWrappingMode: 0
   m_wordWrappingRatios: 0.4
-  m_overflowMode: 3
+  m_overflowMode: 0
   m_linkedTextComponent: {fileID: 0}
   parentLinkedComponent: {fileID: 0}
   m_enableKerning: 0
@@ -5870,7 +5915,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 1}
   m_AnchorMax: {x: 0.5, y: 1}
-  m_AnchoredPosition: {x: 16, y: -672}
+  m_AnchoredPosition: {x: 16, y: -760}
   m_SizeDelta: {x: 400, y: 120}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!114 &1700399204
@@ -5892,6 +5937,7 @@ MonoBehaviour:
   targetText: {fileID: 41611440}
   progressText: {fileID: 46628111}
   progressBarColor: {r: 0.99, g: 0.82, b: 0.33, a: 1}
+  useShortFormat: 1
 --- !u!1 &1713497896
 GameObject:
   m_ObjectHideFlags: 0
@@ -5959,7 +6005,7 @@ MonoBehaviour:
   rescueButton: {fileID: 0}
   mainMenuSceneName: MainMenu
   gameSceneName: "OyunEkran\u0131"
-  useSeparateGameOverScene: 1
+  useSeparateGameOverScene: 0
   gameOverSceneName: GameOver
   buildDedicatedSceneLayoutAtRuntime: 0
   enableContinueOffer: 1
@@ -5979,15 +6025,17 @@ MonoBehaviour:
   rewardedOpeningMessageEnglish: Opening ad...
   rewardedLoadFailedMessageEnglish: Ad is currently unavailable.
   noMovesMessageEnglish: No moves left!
-  playBoardExplosionOnFinalGameOver: 0
+  playBoardExplosionOnFinalGameOver: 1
   boardExplosionDuration: 2
   finalExplosionRandomizeOrder: 1
-  finalExplosionCellsPerTick: 3
+  finalExplosionCellsPerTick: 1
   finalExplosionCenterBurstCombo: 4
   finalExplosionPerCellBurstCombo: 6
   finalExplosionEmitLineClearBursts: 1
   finalExplosionLineBurstChance: 1
   verboseLogs: 1
+  _gameBootstrap: {fileID: 1266623528}
+  _gridView: {fileID: 1058521193}
 --- !u!1 &1731515871
 GameObject:
   m_ObjectHideFlags: 0
@@ -6284,6 +6332,9 @@ MonoBehaviour:
   comboPulseAmount: 0.15
   mainCamera: {fileID: 1095980012}
   gridView: {fileID: 1058521193}
+  gameBootstrap: {fileID: 1266623528}
+  blockTray: {fileID: 2711578}
+  hudCanvas: {fileID: 360410181}
   goodScoreThreshold: 20
   greatScoreThreshold: 50
   epicScoreThreshold: 100
@@ -6375,7 +6426,6 @@ RectTransform:
   - {fileID: 434305157}
   - {fileID: 434305161}
   - {fileID: 2066637410}
-  - {fileID: 2066637510}
   - {fileID: 1700399203}
   m_Father: {fileID: 360410182}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -6400,6 +6450,7 @@ MonoBehaviour:
   bestScoreText: {fileID: 434305150}
   comboText: {fileID: 0}
   keepBestScoreAtInspectorPosition: 1
+  gameBootstrap: {fileID: 1266623528}
   turnCountText: {fileID: 434305158}
   gameStatusText: {fileID: 434305162}
   targetGoalSystem: {fileID: 1700399204}
@@ -6489,10 +6540,9 @@ MonoBehaviour:
   hideInGameMenuOnGameOver: 1
   autoPositionInGameMainMenuButton: 1
   inGameMainMenuTopPadding: {x: 28, y: 24}
-  enableThemeTestButton: 1
-  autoCreateThemeTestButton: 1
+  enableThemeTestButton: 0
   autoPositionThemeTestButton: 1
-  themeTestButton: {fileID: 2066637511}
+  themeTestButton: {fileID: 0}
   themeTestButtonTopPadding: {x: 28, y: 120}
   themeTestButtonSize: {x: 160, y: 160}
   themeTestButtonLabel: TEMA
@@ -6577,6 +6627,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c31b407c4f0a4af4a37745b6d1c8e2a1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BlockPuzzle.UnityAdapter.UI.GameSceneThemeController
+  useUniversalSolidBackground: 1
+  universalBackgroundColor: {r: 0.055, g: 0.082, b: 0.141, a: 1}
   livePreviewInEditor: 1
   applyThemeOnPlay: 1
   useAutomaticThemeProgression: 1
@@ -6592,11 +6644,11 @@ MonoBehaviour:
   primaryGraphics: []
   secondaryGraphics: []
   theme1:
-    displayName: Theme 1
-    gameplayBackgroundSpriteOverride: {fileID: 2328869001408634272, guid: 57021d22ed566f34da242c9b6e861197, type: 3}
+    displayName: Klasik
+    gameplayBackgroundSpriteOverride: {fileID: 21300000, guid: 3559876ef69b32645bfcd49deb6215e4, type: 3}
     gameplayBackgroundTint: {r: 1, g: 1, b: 1, a: 1}
     gameplayBackgroundDimmerColor: {r: 0.07, g: 0.14, b: 0.22, a: 0.32}
-    gameplayCameraClearColor: {r: 0.16, g: 0.24, b: 0.38, a: 1}
+    gameplayCameraClearColor: {r: 0.055, g: 0.082, b: 0.141, a: 1}
     emptyCellColor: {r: 0.12, g: 0.18, b: 0.32, a: 1}
     emptyCellBorderColor: {r: 0.1137255, g: 0.16862746, b: 0.30588236, a: 0.72}
     boardBackdropColor: {r: 0, g: 0.050980397, b: 0.18039216, a: 1}
@@ -6625,8 +6677,8 @@ MonoBehaviour:
     primaryGraphicColor: {r: 1, g: 1, b: 1, a: 1}
     secondaryGraphicColor: {r: 1, g: 1, b: 1, a: 1}
   theme2:
-    displayName: Theme 2
-    gameplayBackgroundSpriteOverride: {fileID: 7903603826956776317, guid: 182cfb2317ad6ea46b9a607879c91f1c, type: 3}
+    displayName: Meyve
+    gameplayBackgroundSpriteOverride: {fileID: 21300000, guid: d325a15eff9953448aeac8306f9e2a48, type: 3}
     gameplayBackgroundTint: {r: 1, g: 1, b: 1, a: 1}
     gameplayBackgroundDimmerColor: {r: 0.03, g: 0.16, b: 0.2, a: 0.36}
     gameplayCameraClearColor: {r: 0.02, g: 0.16, b: 0.2, a: 1}
@@ -6658,8 +6710,8 @@ MonoBehaviour:
     primaryGraphicColor: {r: 1, g: 1, b: 1, a: 1}
     secondaryGraphicColor: {r: 1, g: 1, b: 1, a: 1}
   theme3:
-    displayName: Theme 3
-    gameplayBackgroundSpriteOverride: {fileID: 245285018507420129, guid: 27e146f311f664b44a9f46191e32f839, type: 3}
+    displayName: Kot Pantolon
+    gameplayBackgroundSpriteOverride: {fileID: 21300000, guid: 27e146f311f664b44a9f46191e32f839, type: 3}
     gameplayBackgroundTint: {r: 0.76, g: 0.9, b: 0.88, a: 1}
     gameplayBackgroundDimmerColor: {r: 0.0627451, g: 0.18431373, b: 0.21176471, a: 0.46}
     gameplayCameraClearColor: {r: 0.0627451, g: 0.18431373, b: 0.21176471, a: 1}
@@ -6688,6 +6740,39 @@ MonoBehaviour:
     progressBarColor: {r: 0.84705883, g: 0.78039217, b: 0.6666667, a: 1}
     progressTextColor: {r: 0.972549, g: 0.94509804, b: 0.8784314, a: 1}
     targetTextColor: {r: 0.972549, g: 0.94509804, b: 0.8784314, a: 1}
+    primaryGraphicColor: {r: 1, g: 1, b: 1, a: 1}
+    secondaryGraphicColor: {r: 1, g: 1, b: 1, a: 1}
+  theme4:
+    displayName: "Ah\u015Fap (Wood)"
+    gameplayBackgroundSpriteOverride: {fileID: 21300000, guid: c6d43e35ebc9490d8409d6176953d925, type: 3}
+    gameplayBackgroundTint: {r: 1, g: 1, b: 1, a: 1}
+    gameplayBackgroundDimmerColor: {r: 0.12, g: 0.08, b: 0.05, a: 0.45}
+    gameplayCameraClearColor: {r: 0.12, g: 0.08, b: 0.06, a: 1}
+    emptyCellColor: {r: 0.18, g: 0.12, b: 0.09, a: 1}
+    emptyCellBorderColor: {r: 0.35, g: 0.24, b: 0.16, a: 0.85}
+    boardBackdropColor: {r: 0.14, g: 0.09, b: 0.06, a: 0.95}
+    boardBackdropBorderColor: {r: 0.42, g: 0.28, b: 0.18, a: 1}
+    blockSpriteConfig: {fileID: 11400000, guid: f2266e2969e9425cb2ce8dadecbf5a26, type: 2}
+    blockPalette:
+    - {r: 0.88, g: 0.66, b: 0.36, a: 1}
+    - {r: 0.48, g: 0.31, b: 0.19, a: 1}
+    - {r: 0.69, g: 0.28, b: 0.22, a: 1}
+    - {r: 0.95, g: 0.8, b: 0.54, a: 1}
+    - {r: 0.71, g: 0.44, b: 0.25, a: 1}
+    - {r: 0.31, g: 0.25, b: 0.23, a: 1}
+    - {r: 0.8, g: 0.37, b: 0.24, a: 1}
+    - {r: 0.78, g: 0.56, b: 0.3, a: 1}
+    trayBlockBrightness: 1.05
+    dragBrightnessMultiplier: 1.15
+    trayNormalAlpha: 1
+    trayDragAlpha: 0.96
+    scoreTextColor: {r: 0.99, g: 0.96, b: 0.91, a: 1}
+    bestScoreTextColor: {r: 0.99, g: 0.96, b: 0.91, a: 1}
+    turnTextColor: {r: 0.99, g: 0.96, b: 0.91, a: 1}
+    statusTextColor: {r: 0.99, g: 0.96, b: 0.91, a: 1}
+    progressBarColor: {r: 0.96, g: 0.72, b: 0.26, a: 1}
+    progressTextColor: {r: 0.99, g: 0.96, b: 0.91, a: 1}
+    targetTextColor: {r: 0.99, g: 0.96, b: 0.91, a: 1}
     primaryGraphicColor: {r: 1, g: 1, b: 1, a: 1}
     secondaryGraphicColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &1926930851
@@ -6942,7 +7027,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1951565347
 RectTransform:
   m_ObjectHideFlags: 0
@@ -6984,8 +7069,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: 
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: f8802cdf5316acb45b71a160083153ee, type: 2}
-  m_sharedMaterial: {fileID: -6269700506862428983, guid: f8802cdf5316acb45b71a160083153ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 23f45ef339bad2947b41ae7c1838204d, type: 2}
+  m_sharedMaterial: {fileID: 401957184552901167, guid: 23f45ef339bad2947b41ae7c1838204d, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -7241,6 +7326,37 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!1 &2056242636
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2056242637}
+  m_Layer: 0
+  m_Name: DeferredPlayerPrefsSaver
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2056242637
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2056242636}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2066637409
 GameObject:
   m_ObjectHideFlags: 0
@@ -7269,7 +7385,7 @@ RectTransform:
   m_GameObject: {fileID: 2066637409}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1.1474241, y: 1.1474241, z: 1.1474241}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 1951565347}
@@ -7278,7 +7394,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 369, y: 861}
-  m_SizeDelta: {x: 160, y: 160}
+  m_SizeDelta: {x: 92, y: 92}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &2066637411
 MonoBehaviour:
@@ -7356,9 +7472,9 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: -1729966358, guid: 4ae2ccf01a85b364da21386682eb8574, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 1c77132d321545098b31761ce4f26a52, type: 3}
   m_Type: 0
-  m_PreserveAspect: 0
+  m_PreserveAspect: 1
   m_FillCenter: 1
   m_FillMethod: 4
   m_FillAmount: 1
@@ -7374,144 +7490,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2066637409}
   m_CullTransparentMesh: 1
---- !u!1 &2066637509
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2066637510}
-  - component: {fileID: 2066637513}
-  - component: {fileID: 2066637512}
-  - component: {fileID: 2066637511}
-  - component: {fileID: 2066637514}
-  m_Layer: 0
-  m_Name: ThemeTestButton
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!224 &2066637510
-RectTransform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2066637509}
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.068310745, y: 0.068310745, z: 0.068310745}
-  m_ConstrainProportionsScale: 1
-  m_Children: []
-  m_Father: {fileID: 1817837398}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -325, y: 917}
-  m_SizeDelta: {x: 2048, y: 1024}
-  m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &2066637511
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2066637509}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
-  m_Navigation:
-    m_Mode: 3
-    m_WrapAround: 0
-    m_SelectOnUp: {fileID: 0}
-    m_SelectOnDown: {fileID: 0}
-    m_SelectOnLeft: {fileID: 0}
-    m_SelectOnRight: {fileID: 0}
-  m_Transition: 1
-  m_Colors:
-    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
-    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
-    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
-    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
-    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
-    m_ColorMultiplier: 1
-    m_FadeDuration: 0.1
-  m_SpriteState:
-    m_HighlightedSprite: {fileID: 0}
-    m_PressedSprite: {fileID: 0}
-    m_SelectedSprite: {fileID: 0}
-    m_DisabledSprite: {fileID: 0}
-  m_AnimationTriggers:
-    m_NormalTrigger: Normal
-    m_HighlightedTrigger: Highlighted
-    m_PressedTrigger: Pressed
-    m_SelectedTrigger: Selected
-    m_DisabledTrigger: Disabled
-  m_Interactable: 1
-  m_TargetGraphic: {fileID: 2066637512}
-  m_OnClick:
-    m_PersistentCalls:
-      m_Calls: []
---- !u!114 &2066637512
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2066637509}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 0.8, g: 0.94, b: 0.9, a: 1}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 3151347466747149330, guid: 9ba67229a7455a84e8c4bff1f72dd6dd, type: 3}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
---- !u!222 &2066637513
-CanvasRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2066637509}
-  m_CullTransparentMesh: 1
---- !u!114 &2066637514
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2066637509}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3f1c9cf7e6d74d8ca1a4b2a7c8b1d2e3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BlockPuzzle.UnityAdapter.UI.ThemeTestButtonController
-  button: {fileID: 2066637511}
-  label: {fileID: 0}
-  backgroundImage: {fileID: 0}
-  buttonText: TEMA
-  verboseLogs: 1
 --- !u!1 &2098006348
 GameObject:
   m_ObjectHideFlags: 0
@@ -7684,8 +7662,10 @@ MonoBehaviour:
   sfxSource: {fileID: 688878633}
   musicVolumeMultiplier: 1
   sfxVolumeMultiplier: 1
-  disableMusicPlayback: 1
-  disableSfxPlayback: 1
+  comboMusicPitchBoost: 0.08
+  comboMusicThreshold: 2
+  disableMusicPlayback: 0
+  disableSfxPlayback: 0
   verboseLogs: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
@@ -7715,3 +7695,5 @@ SceneRoots:
   - {fileID: 1953952572}
   - {fileID: 627133277}
   - {fileID: 312295460}
+  - {fileID: 2056242637}
+  - {fileID: 439341504}
