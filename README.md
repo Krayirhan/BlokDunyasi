@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="Assets/Branding/AppIconSource.png" alt="Blok Dünyası ikon" width="128" />
+<img src="StoreScreenshots/game-logo.png" alt="Blok Dünyası logo" width="256" />
 
 # Blok Dünyası
 
