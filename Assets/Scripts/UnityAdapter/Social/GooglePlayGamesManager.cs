@@ -103,9 +103,9 @@ namespace BlockPuzzle.Core.Social
             }
         }
 
-        public void PostScore(int score)
+        public void PostScore(int score, int rescueCount = 0, string gameMode = "Classic")
         {
-            BlockPuzzle.UnityAdapter.Social.FirebaseManager.Instance?.PostScore(score);
+            BlockPuzzle.UnityAdapter.Social.FirebaseManager.Instance?.PostScore(score, rescueCount, gameMode);
         }
 
         public void ShowLeaderboardUI()

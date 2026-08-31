@@ -1,3 +1,5 @@
+#pragma warning disable 0414
+using UnityEngine.InputSystem;
 using System;
 using System.Reflection;
 using BlockPuzzle.Core.Board;
@@ -19,6 +21,10 @@ namespace BlockPuzzle.UnityAdapter.UI
     [ExecuteAlways]
     public class GameSceneThemeController : MonoBehaviour
     {
+        [Header("Universal Flat Background")]
+        [SerializeField] private bool useUniversalSolidBackground = true;
+        [SerializeField] private Color universalBackgroundColor = new Color(0.055f, 0.082f, 0.141f, 1f); // #0E1524 Clean Dark Slate
+
         private const int Theme2RunScoreMilestone = 900;
         private const int Theme3RunScoreMilestone = 2200;
         private const int Theme2ComboMilestone = 3;
@@ -29,7 +35,8 @@ namespace BlockPuzzle.UnityAdapter.UI
         {
             Theme1 = 0,
             Theme2 = 1,
-            Theme3 = 2
+            Theme3 = 2,
+            Theme4 = 3
         }
 
         [Serializable]
@@ -77,6 +84,7 @@ namespace BlockPuzzle.UnityAdapter.UI
         [SerializeField] private bool seedTheme1FromCurrentSceneOnce = true;
         [SerializeField] private bool theme1Seeded;
         [SerializeField] private bool verboseThemeLogs = true;
+        
 
         [Header("References")]
         [SerializeField] private GameBootstrap gameBootstrap;
@@ -88,15 +96,18 @@ namespace BlockPuzzle.UnityAdapter.UI
         [SerializeField] private Graphic[] secondaryGraphics;
 
         [Header("Themes")]
-        [SerializeField] private SceneThemeData theme1 = new SceneThemeData { displayName = "Theme 1" };
-        [SerializeField] private SceneThemeData theme2 = new SceneThemeData { displayName = "Theme 2" };
-        [SerializeField] private SceneThemeData theme3 = new SceneThemeData { displayName = "Theme 3" };
+        [SerializeField] private SceneThemeData theme1 = new SceneThemeData { displayName = "Klasik" };
+        [SerializeField] private SceneThemeData theme2 = new SceneThemeData { displayName = "Meyve" };
+        [SerializeField] private SceneThemeData theme3 = new SceneThemeData { displayName = "Kot Pantolon" };
+        [SerializeField] private SceneThemeData theme4 = new SceneThemeData { displayName = "Ahşap (Wood)" };
 
         private ThemeSlot _lastAppliedTheme = (ThemeSlot)(-1);
         private bool _theme2TriggeredThisRun;
         private bool _theme3TriggeredThisRun;
         private bool _runThemeInitialized;
         private int _forceTheme1FramesRemaining;
+        private bool _manualThemeSelected;
+        private int _lastComboStreak;
 
         public bool LivePreviewInEditor
         {
@@ -113,6 +124,7 @@ namespace BlockPuzzle.UnityAdapter.UI
         public SceneThemeData Theme1 => theme1;
         public SceneThemeData Theme2 => theme2;
         public SceneThemeData Theme3 => theme3;
+        public SceneThemeData Theme4 => theme4;
 
         public static GameSceneThemeController GetOrCreateRuntimeController()
         {
@@ -124,6 +136,14 @@ namespace BlockPuzzle.UnityAdapter.UI
             controller = host.AddComponent<GameSceneThemeController>();
             controller.BuildRuntimeThemeSetFromScene();
             return controller;
+        }
+
+                private void Start()
+        {
+            if (Application.isPlaying && applyThemeOnPlay)
+            {
+                ApplyThemeById(UISettingsProfile.GetThemeId());
+            }
         }
 
         private void Awake()
@@ -170,6 +190,36 @@ namespace BlockPuzzle.UnityAdapter.UI
 
         private void Update()
         {
+            if (useUniversalSolidBackground)
+            {
+                var mainCam = Camera.main;
+                if (mainCam != null && mainCam.backgroundColor != universalBackgroundColor)
+                {
+                    mainCam.clearFlags = CameraClearFlags.SolidColor;
+                    mainCam.backgroundColor = universalBackgroundColor;
+                }
+            }
+            // Listen for T key to cycle themes
+            bool tPressed = false;
+            try
+            {
+                if (Keyboard.current != null && Keyboard.current.tKey.wasPressedThisFrame)
+                    tPressed = true;
+            }
+            catch {}
+            try
+            {
+                if (UnityEngine.Input.GetKeyDown(KeyCode.T))
+                    tPressed = true;
+            }
+            catch {}
+
+            if (tPressed)
+            {
+                CycleThemeForTesting();
+                return;
+            }
+
 #if UNITY_EDITOR
             if (!Application.isPlaying && livePreviewInEditor)
             {
@@ -190,7 +240,7 @@ namespace BlockPuzzle.UnityAdapter.UI
                 return;
             }
 
-            ThemeSlot runtimeSlot = ClampThemeId(UISettingsProfile.GetThemeId());
+            ThemeSlot runtimeSlot = ResolveEnabledTheme(UISettingsProfile.GetThemeId());
             if (_lastAppliedTheme != runtimeSlot)
                 ApplyTheme(runtimeSlot);
         }
@@ -211,16 +261,34 @@ namespace BlockPuzzle.UnityAdapter.UI
 
         public void ApplyThemeById(int themeId)
         {
-            ApplyTheme(ClampThemeId(themeId));
+            ApplyTheme(ResolveEnabledTheme(themeId));
+        }
+
+        /// <summary>
+        /// Applies a player-selected theme and prevents automatic progression
+        /// from overwriting it during the current session.
+        /// </summary>
+        public void ApplyManualThemeById(int themeId)
+        {
+            _manualThemeSelected = true;
+            int clampedThemeId = (int)ResolveEnabledTheme(themeId);
+            UISettingsProfile.SetThemeId(clampedThemeId);
+            UISettingsProfile.SetLastAutomaticThemeId(clampedThemeId);
+            ApplyTheme((ThemeSlot)clampedThemeId);
         }
 
         public void CycleThemeForTesting()
         {
-            int nextThemeId = (UISettingsProfile.GetThemeId() + 1) % 3;
-            UISettingsProfile.SetThemeId(nextThemeId);
-            UISettingsProfile.SetLastAutomaticThemeId(nextThemeId);
-            ApplyThemeById(nextThemeId);
-            UnityEngine.Debug.Log($"[GameSceneThemeController] CycleThemeForTesting -> {nextThemeId}");
+            _forceTheme1FramesRemaining = 0;
+            int currentThemeId = UISettingsProfile.GetThemeId();
+            // T-key preview is intentionally limited to the four approved themes.
+            int nextThemeId = currentThemeId >= UISettingsProfile.ThemeClassic &&
+                              currentThemeId <= UISettingsProfile.ThemeWood
+                ? (currentThemeId + 1) % 4
+                : UISettingsProfile.ThemeClassic;
+            selectedTheme = ClampThemeId(nextThemeId);
+            ApplyManualThemeById(nextThemeId);
+            UnityEngine.Debug.Log($"[GameSceneThemeController] CycleThemeForTesting -> Theme {nextThemeId} ({selectedTheme}) applied successfully!");
         }
 
         public void SelectAutomaticThemeForCurrentProgress()
@@ -237,7 +305,7 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (!_firstGameplayOpeningConsumed)
             {
                 _firstGameplayOpeningConsumed = true;
-                _forceTheme1FramesRemaining = 6;
+                _forceTheme1FramesRemaining = 0;
                 ApplyAutomaticTheme(UISettingsProfile.ThemeClassic, "first gameplay opening");
                 return;
             }
@@ -247,7 +315,8 @@ namespace BlockPuzzle.UnityAdapter.UI
                     UISettingsProfile.GetLastAutomaticThemeId(),
                     (UISettingsProfile.ThemeClassic, 1f),
                     (UISettingsProfile.ThemeNight, 1f),
-                    (UISettingsProfile.ThemeVivid, 1f)),
+                    (UISettingsProfile.ThemeVivid, 1f),
+                    (UISettingsProfile.ThemeWood, 1f)),
                 "run-start random");
         }
 
@@ -289,6 +358,7 @@ namespace BlockPuzzle.UnityAdapter.UI
             _runThemeInitialized = false;
             _theme2TriggeredThisRun = false;
             _theme3TriggeredThisRun = false;
+            _lastComboStreak = 0;
         }
 
         private void HandleRuntimeScoreBreakdown(ScoreBreakdownInfo breakdown)
@@ -296,55 +366,70 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (!useAutomaticThemeProgression || !applyThemeOnPlay)
                 return;
 
-            EvaluateThemeMilestones(breakdown.TotalScore, breakdown.ComboStreak, allowThemePromotion: true);
+            EvaluateComboThemeProgression(breakdown);
         }
 
         private void EvaluateThemeMilestones(int totalScore, int comboStreak, bool allowThemePromotion)
         {
-            if (!allowThemePromotion)
+            if (!allowThemePromotion || _manualThemeSelected)
                 return;
 
             int currentThemeId = UISettingsProfile.GetThemeId();
-
             if (!_theme2TriggeredThisRun &&
                 (comboStreak >= Theme2ComboMilestone || totalScore >= Theme2RunScoreMilestone))
             {
                 _theme2TriggeredThisRun = true;
-                int nextThemeId = PickWeightedTheme(
-                    currentThemeId,
-                    (UISettingsProfile.ThemeClassic, 1f),
-                    (UISettingsProfile.ThemeNight, 1f),
-                    (UISettingsProfile.ThemeVivid, 1f));
-
-                ApplyAutomaticTheme(
-                    nextThemeId,
-                    $"milestone-1 totalScore={totalScore}, combo={comboStreak}");
-                currentThemeId = nextThemeId;
+                ApplyAutomaticTheme((currentThemeId + 1) % 4, $"milestone-1 totalScore={totalScore}, combo={comboStreak}");
+                currentThemeId = UISettingsProfile.GetThemeId();
             }
 
             if (!_theme3TriggeredThisRun &&
                 (comboStreak >= Theme3ComboMilestone || totalScore >= Theme3RunScoreMilestone))
             {
                 _theme3TriggeredThisRun = true;
-                int nextThemeId = PickWeightedTheme(
-                    currentThemeId,
-                    (UISettingsProfile.ThemeClassic, 1f),
-                    (UISettingsProfile.ThemeNight, 1f),
-                    (UISettingsProfile.ThemeVivid, 1f));
+                ApplyAutomaticTheme((currentThemeId + 1) % 4, $"milestone-2 totalScore={totalScore}, combo={comboStreak}");
+            }
+        }
 
-                ApplyAutomaticTheme(
-                    nextThemeId,
-                    $"milestone-2 totalScore={totalScore}, combo={comboStreak}");
+        private void EvaluateComboThemeProgression(ScoreBreakdownInfo breakdown)
+        {
+            bool shouldAdvanceTheme = false;
+
+            // Trigger on combo streak increment (Combo 1, Combo 2, Combo 3...)
+            if (breakdown.ComboStreak > 0 && breakdown.ComboStreak != _lastComboStreak)
+            {
+                _lastComboStreak = breakdown.ComboStreak;
+                shouldAdvanceTheme = true;
+            }
+            // Also trigger on exciting multi-line clears (2 or more lines cleared at once)
+            else if (breakdown.LinesCleared >= 2)
+            {
+                shouldAdvanceTheme = true;
+            }
+
+            // Reset streak tracker if combo drops
+            if (breakdown.ComboStreak == 0)
+            {
+                _lastComboStreak = 0;
+            }
+
+            if (shouldAdvanceTheme)
+            {
+                int currentThemeId = UISettingsProfile.GetThemeId();
+                int nextThemeId = (currentThemeId + 1) % 4;
+                ApplyAutomaticTheme(nextThemeId, $"Combo: {breakdown.ComboStreak}x, Lines: {breakdown.LinesCleared}");
             }
         }
 
         private void ApplyAutomaticTheme(int themeId, string reason)
         {
-            UISettingsProfile.SetThemeId(themeId);
-            UISettingsProfile.SetLastAutomaticThemeId(themeId);
+            int nextThemeId = (int)ResolveEnabledTheme(themeId);
+            UISettingsProfile.SetThemeId(nextThemeId);
+            UISettingsProfile.SetLastAutomaticThemeId(nextThemeId);
+            selectedTheme = (ThemeSlot)nextThemeId;
+            ApplyTheme((ThemeSlot)nextThemeId);
 
-            if (verboseThemeLogs)
-                UnityEngine.Debug.Log($"[GameSceneThemeController] Automatic theme -> {themeId} ({reason})");
+            UnityEngine.Debug.Log($"[GameSceneThemeController] Combo Theme Advance -> Theme {nextThemeId} ({selectedTheme}) applied! ({reason})");
         }
 
         private static int PickWeightedTheme(int excludedThemeId, params (int themeId, float weight)[] entries)
@@ -415,7 +500,7 @@ namespace BlockPuzzle.UnityAdapter.UI
         {
             ResolveReferences();
             CaptureCurrentInto(theme1);
-            theme1.displayName = "Theme 1";
+            theme1.displayName = "Klasik";
             theme1Seeded = true;
         }
 
@@ -424,7 +509,7 @@ namespace BlockPuzzle.UnityAdapter.UI
         {
             ResolveReferences();
             CaptureCurrentInto(theme2);
-            theme2.displayName = "Theme 2";
+            theme2.displayName = "Meyve";
         }
 
         [ContextMenu("Capture Current To Theme 3")]
@@ -432,7 +517,7 @@ namespace BlockPuzzle.UnityAdapter.UI
         {
             ResolveReferences();
             CaptureCurrentInto(theme3);
-            theme3.displayName = "Theme 3";
+            theme3.displayName = "Kot Pantolon";
         }
 
         private void TrySeedTheme1()
@@ -563,6 +648,7 @@ namespace BlockPuzzle.UnityAdapter.UI
                 ThemeSlot.Theme1 => theme1,
                 ThemeSlot.Theme2 => theme2,
                 ThemeSlot.Theme3 => theme3,
+                ThemeSlot.Theme4 => theme4,
                 _ => theme1
             };
         }
@@ -571,10 +657,17 @@ namespace BlockPuzzle.UnityAdapter.UI
         {
             return themeId switch
             {
+                0 => ThemeSlot.Theme1,
                 1 => ThemeSlot.Theme2,
                 2 => ThemeSlot.Theme3,
+                3 => ThemeSlot.Theme4,
                 _ => ThemeSlot.Theme1
             };
+        }
+
+        private ThemeSlot ResolveEnabledTheme(int themeId)
+        {
+            return ClampThemeId(themeId);
         }
 
         private void CaptureCurrentInto(SceneThemeData data)
@@ -612,15 +705,119 @@ namespace BlockPuzzle.UnityAdapter.UI
             data.secondaryGraphicColor = GetFirstGraphicColor(secondaryGraphics, Color.white);
         }
 
-        private void ApplyToBootstrap(SceneThemeData data)
+                private void ApplyToBootstrap(SceneThemeData data)
         {
             SetField(gameBootstrap, "gameplayBackgroundSpriteOverride", data.gameplayBackgroundSpriteOverride);
             SetField(gameBootstrap, "gameplayBackgroundTint", data.gameplayBackgroundTint);
             SetField(gameBootstrap, "gameplayBackgroundDimmerColor", data.gameplayBackgroundDimmerColor);
             SetField(gameBootstrap, "gameplayCameraClearColor", data.gameplayCameraClearColor);
 
-            InvokePrivate(gameBootstrap, "NormalizeGameplayCamera", Camera.main);
-            InvokePrivate(gameBootstrap, "EnsureGameplayVisualReadability", Camera.main);
+            var cam = Camera.main ?? UnityEngine.Object.FindFirstObjectByType<Camera>();
+            if (cam != null)
+            {
+                cam.clearFlags = CameraClearFlags.SolidColor;
+                cam.backgroundColor = data.gameplayCameraClearColor;
+            }
+
+            // 1. Update SceneBackground SpriteRenderer
+            SpriteRenderer bgSr = null;
+            if (gameBootstrap != null)
+            {
+                var bgChild = gameBootstrap.transform.Find("SceneBackground");
+                if (bgChild != null) bgSr = bgChild.GetComponent<SpriteRenderer>();
+            }
+            if (bgSr == null)
+            {
+                var allSrs = UnityEngine.Object.FindObjectsByType<SpriteRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                foreach (var r in allSrs)
+                {
+                    if (r != null && r.gameObject.name == "SceneBackground")
+                    {
+                        bgSr = r;
+                        break;
+                    }
+                }
+            }
+
+            if (bgSr != null)
+            {
+                if (data.gameplayBackgroundSpriteOverride != null)
+                {
+                    bgSr.gameObject.SetActive(true);
+                    bgSr.enabled = true;
+                    bgSr.sprite = data.gameplayBackgroundSpriteOverride;
+                    bgSr.color = data.gameplayBackgroundTint;
+
+                    if (cam != null && bgSr.sprite != null)
+                    {
+                        bgSr.transform.position = new Vector3(cam.transform.position.x, cam.transform.position.y, 10f);
+                        Vector2 spriteSize = bgSr.sprite.bounds.size;
+                        if (spriteSize.x > 0f && spriteSize.y > 0f)
+                        {
+                            float worldHeight = cam.orthographicSize * 2f;
+                            float worldWidth = worldHeight * cam.aspect;
+                            float scale = Mathf.Max(worldWidth / spriteSize.x, worldHeight / spriteSize.y);
+                            bgSr.transform.localScale = new Vector3(scale, scale, 1f);
+                        }
+                    }
+                }
+                else
+                {
+                    bgSr.enabled = false;
+                    bgSr.gameObject.SetActive(false);
+                }
+            }
+
+            // 2. Update SceneBackgroundDimmer SpriteRenderer
+            SpriteRenderer dimmerSr = null;
+            if (gameBootstrap != null)
+            {
+                var dimmerChild = gameBootstrap.transform.Find("SceneBackgroundDimmer");
+                if (dimmerChild != null) dimmerSr = dimmerChild.GetComponent<SpriteRenderer>();
+            }
+            if (dimmerSr == null)
+            {
+                var allSrs = UnityEngine.Object.FindObjectsByType<SpriteRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                foreach (var r in allSrs)
+                {
+                    if (r != null && r.gameObject.name == "SceneBackgroundDimmer")
+                    {
+                        dimmerSr = r;
+                        break;
+                    }
+                }
+            }
+
+            if (dimmerSr != null)
+            {
+                if (data.gameplayBackgroundSpriteOverride != null && data.gameplayBackgroundDimmerColor.a > 0.01f)
+                {
+                    dimmerSr.gameObject.SetActive(true);
+                    dimmerSr.enabled = true;
+                    dimmerSr.color = data.gameplayBackgroundDimmerColor;
+
+                    if (cam != null)
+                    {
+                        dimmerSr.transform.position = new Vector3(cam.transform.position.x, cam.transform.position.y, 9.5f);
+                        if (dimmerSr.sprite != null)
+                        {
+                            Vector2 spriteSize = dimmerSr.sprite.bounds.size;
+                            if (spriteSize.x > 0f && spriteSize.y > 0f)
+                            {
+                                float worldHeight = cam.orthographicSize * 2f;
+                                float worldWidth = worldHeight * cam.aspect;
+                                float scale = Mathf.Max(worldWidth / spriteSize.x, worldHeight / spriteSize.y);
+                                dimmerSr.transform.localScale = new Vector3(scale, scale, 1f);
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    dimmerSr.enabled = false;
+                    dimmerSr.gameObject.SetActive(false);
+                }
+            }
         }
 
         private void ApplyToGrid(SceneThemeData data)
@@ -652,20 +849,69 @@ namespace BlockPuzzle.UnityAdapter.UI
             InvokePrivate(blockTray, "RefreshBlockVisuals");
         }
 
-        private void ApplyToHud(SceneThemeData data)
+                private void ApplyToHud(SceneThemeData data)
         {
             SetHudTextColor("currentScoreText", data.scoreTextColor);
             SetHudTextColor("bestScoreText", data.bestScoreTextColor);
             SetHudTextColor("turnCountText", data.turnTextColor);
             SetHudTextColor("gameStatusText", data.statusTextColor);
+
+            // Harmonize Home Button (MainMenuButton ingame)
+            var allImgs = UnityEngine.Object.FindObjectsByType<Image>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (var img in allImgs)
+            {
+                if (img == null) continue;
+                if (img.gameObject.name == "MainMenuButton ingame" || img.gameObject.name == "MainMenuButton")
+                {
+                    img.color = data.primaryGraphicColor;
+                }
+                else if (img.gameObject.name == "BestPanelarkasi")
+                {
+                    Color pCol = data.boardBackdropColor;
+                    pCol.a = 0.85f;
+                    img.color = pCol;
+                }
+            }
         }
 
-        private void ApplyToTargetGoal(SceneThemeData data)
+                private void ApplyToTargetGoal(SceneThemeData data)
         {
-            SetField(targetGoalSystem, "progressBarColor", data.progressBarColor);
-            SetTargetTextColor("progressText", data.progressTextColor);
-            SetTargetTextColor("targetText", data.targetTextColor);
-            InvokePrivate(targetGoalSystem, "UpdateDisplay");
+            if (targetGoalSystem == null)
+                targetGoalSystem = UnityEngine.Object.FindFirstObjectByType<TargetGoalSystem>(FindObjectsInactive.Include);
+
+            if (targetGoalSystem != null)
+            {
+                SetField(targetGoalSystem, "progressBarColor", data.progressBarColor);
+                SetTargetTextColor("progressText", data.progressTextColor);
+                SetTargetTextColor("targetText", data.targetTextColor);
+
+                // Update EmptyStatePanel (background capsule of progress bar)
+                Transform emptyPanel = targetGoalSystem.transform.Find("EmptyStatePanel");
+                if (emptyPanel == null)
+                {
+                    foreach (Transform c in targetGoalSystem.transform)
+                    {
+                        if (c.name.Contains("EmptyState") || c.name.Contains("Panel"))
+                        {
+                            emptyPanel = c;
+                            break;
+                        }
+                    }
+                }
+
+                if (emptyPanel != null)
+                {
+                    var img = emptyPanel.GetComponent<Image>();
+                    if (img != null)
+                    {
+                        Color capsuleColor = data.boardBackdropColor;
+                        capsuleColor.a = 0.95f;
+                        img.color = capsuleColor;
+                    }
+                }
+
+                InvokePrivate(targetGoalSystem, "UpdateDisplay");
+            }
         }
 
         private static void ApplyGraphics(Graphic[] graphics, Color color)

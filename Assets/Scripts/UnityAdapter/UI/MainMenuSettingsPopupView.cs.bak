@@ -35,13 +35,6 @@ namespace BlockPuzzle.UnityAdapter.UI
         [SerializeField] private Button replayTutorialButton;
         [SerializeField] private Button moreGamesButton;
 
-        [Header("Language Button Sprites")]
-        [SerializeField] private Sprite activeLanguageSprite;
-        [SerializeField] private Sprite inactiveLanguageSprite;
-        [SerializeField] private Image turkishButtonImage;
-        [SerializeField] private Image englishButtonImage;
-        [SerializeField] private Image koreanButtonImage;
-
         [Header("Settings Links")]
         [SerializeField] private string moreGamesUrl = "https://play.google.com/store/apps/dev?id=5261548971044985006&hl=tr";
 
@@ -65,20 +58,7 @@ namespace BlockPuzzle.UnityAdapter.UI
         public void OnLanguageChanged(LanguageManager.Language newLanguage)
         {
             RefreshTexts();
-            RefreshLanguageButtonVisuals(newLanguage);
             HideReplayTutorialRow();
-        }
-
-        public void RefreshLanguageButtonVisuals(LanguageManager.Language currentLang)
-        {
-            if (turkishButtonImage != null && activeLanguageSprite != null && inactiveLanguageSprite != null)
-                turkishButtonImage.sprite = currentLang == LanguageManager.Language.Turkish ? activeLanguageSprite : inactiveLanguageSprite;
-
-            if (englishButtonImage != null && activeLanguageSprite != null && inactiveLanguageSprite != null)
-                englishButtonImage.sprite = currentLang == LanguageManager.Language.English ? activeLanguageSprite : inactiveLanguageSprite;
-
-            if (koreanButtonImage != null && activeLanguageSprite != null && inactiveLanguageSprite != null)
-                koreanButtonImage.sprite = currentLang == LanguageManager.Language.Korean ? activeLanguageSprite : inactiveLanguageSprite;
         }
 
         private void RefreshTexts()
@@ -120,10 +100,6 @@ namespace BlockPuzzle.UnityAdapter.UI
             SetRowLabelText("SoundRow",               soundText);
             SetRowLabelText("VibrationRow",           vibrationText);
             SetRowLabelText("MoreGamesRow",           moreGamesText);
-
-            string langLabelText = (lang == LanguageManager.Language.English) ? "LANGUAGE" : (lang == LanguageManager.Language.Korean ? "언어" : "DİL");
-            SetChildText(panel, "LanguageSectionLabel", langLabelText);
-
             RefreshLocalizedFonts(lang);
         }
 
@@ -140,8 +116,8 @@ namespace BlockPuzzle.UnityAdapter.UI
             {
                 titleText = "AYARLAR";
                 soundText = "SES";
-                vibrationText = "TİTREŞİM";
-                moreGamesText = "DİĞER UYGULAMALARIM";
+                vibrationText = "TITRESIM";
+                moreGamesText = "DIGER UYGULAMALARIM";
             }
         }
 
@@ -167,31 +143,16 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (panel == null)
                 return;
 
-            ApplyLocalizedFont(panel.Find("TitleText"), lang, 42f, HorizontalAlignmentOptions.Center);
-            ApplyLocalizedFont(panel.Find("SoundRow/RowLabel"), lang, 34f, HorizontalAlignmentOptions.Left);
-            ApplyLocalizedFont(panel.Find("VibrationRow/RowLabel"), lang, 34f, HorizontalAlignmentOptions.Left);
-            ApplyLocalizedFont(panel.Find("LanguageSectionLabel"), lang, 26f, HorizontalAlignmentOptions.Center);
-            ApplyLocalizedFont(panel.Find("MoreGamesRow/RowLabel"), lang, 32f, HorizontalAlignmentOptions.Center);
-
-            ApplyLocalizedFont(FindLanguageButtonText(panel, "TurkishButton", "Türkçe"), lang, 30f, HorizontalAlignmentOptions.Center);
-            ApplyLocalizedFont(FindLanguageButtonText(panel, "EnglishButton", "English"), lang, 30f, HorizontalAlignmentOptions.Center);
-            ApplyLocalizedFont(FindLanguageButtonText(panel, "KoreanButton", "Korean"), lang, 30f, HorizontalAlignmentOptions.Center);
+            ApplyLocalizedFont(panel.Find("TitleText"), lang, 64f);
+            ApplyLocalizedFont(panel.Find("SoundRow/RowLabel"), lang, 48f);
+            ApplyLocalizedFont(panel.Find("VibrationRow/RowLabel"), lang, 48f);
+            ApplyLocalizedFont(panel.Find("MoreGamesRow/RowLabel"), lang, 48f);
+            ApplyLocalizedFont(panel.Find("TurkishButton/Text"), lang, 28f);
+            ApplyLocalizedFont(panel.Find("EnglishButton/Text"), lang, 28f);
+            ApplyLocalizedFont(panel.Find("KoreanButton/Text"), lang, 28f);
         }
 
-        private static Transform FindLanguageButtonText(Transform parent, params string[] names)
-        {
-            if (parent == null) return null;
-            foreach (var n in names)
-            {
-                var t = parent.Find(n + "/Text");
-                if (t != null) return t;
-                var t2 = parent.Find(n);
-                if (t2 != null) return t2;
-            }
-            return null;
-        }
-
-        private void ApplyLocalizedFont(Transform target, LanguageManager.Language lang, float fontSize, HorizontalAlignmentOptions horizontalAlign = HorizontalAlignmentOptions.Center)
+        private void ApplyLocalizedFont(Transform target, LanguageManager.Language lang, float fontSize)
         {
             if (target == null)
                 return;
@@ -200,21 +161,23 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (text == null)
                 return;
 
-            TMP_FontAsset font = ResolveFontForLanguage(lang);
-            if (font != null)
+            // Skip font override for elements with LocalizedText — it manages its own font
+            var localizedText = target.GetComponent<LocalizedText>();
+            if (localizedText == null)
             {
-                text.font = font;
-                if (font.material != null)
-                    text.fontSharedMaterial = font.material;
+                TMP_FontAsset font = ResolveFontForLanguage(lang);
+                if (font != null)
+                {
+                    text.font = font;
+                    if (font.material != null)
+                        text.fontSharedMaterial = font.material;
+                }
             }
 
             text.enableAutoSizing = true;
             text.fontSizeMax = fontSize;
-            text.fontSizeMin = Mathf.Max(18f, fontSize * (lang == LanguageManager.Language.Korean ? 0.65f : 0.75f));
+            text.fontSizeMin = Mathf.Max(18f, fontSize * (lang == LanguageManager.Language.Korean ? 0.58f : 0.72f));
             text.fontSize = fontSize;
-            text.horizontalAlignment = horizontalAlign;
-            text.verticalAlignment = VerticalAlignmentOptions.Middle;
-            text.margin = Vector4.zero; // Clear any old scene margins
             text.overflowMode = TextOverflowModes.Ellipsis;
 
             try
@@ -229,7 +192,16 @@ namespace BlockPuzzle.UnityAdapter.UI
 
         private TMP_FontAsset ResolveFontForLanguage(LanguageManager.Language lang)
         {
-            return LocalizedFontUtility.ResolveTmpFont(lang, null);
+            if (lang == LanguageManager.Language.Korean)
+            {
+                if (_koreanFont == null)
+                    _koreanFont = LocalizedFontUtility.ResolveTmpFont(lang, null);
+
+                if (_koreanFont != null)
+                    return _koreanFont;
+            }
+
+            return TMP_Settings.defaultFontAsset;
         }
 
         private void Awake()
@@ -281,7 +253,6 @@ namespace BlockPuzzle.UnityAdapter.UI
             {
                 RefreshUI();
                 RefreshTexts();
-                RefreshLanguageButtonVisuals(LanguageManager.Instance.CurrentLanguage);
                 HideReplayTutorialRow();
             }
         }
@@ -314,8 +285,6 @@ namespace BlockPuzzle.UnityAdapter.UI
 
         public void Open()
         {
-            EnsureHierarchy();
-
             if (popupRoot == null)
                 return;
 
@@ -435,98 +404,48 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (panel == null)
                 panel = EnsureRectTransform(popupRoot, "Panel", true, out bool panelNew);
 
-            if (panel != null)
+            if (panel.GetComponent<Image>() == null)
             {
                 panel.anchorMin = new Vector2(0.5f, 0.5f);
                 panel.anchorMax = new Vector2(0.5f, 0.5f);
                 panel.pivot = new Vector2(0.5f, 0.5f);
-                panel.sizeDelta = new Vector2(768f, 820f);
-                panel.anchoredPosition = new Vector2(0f, 20f);
+                panel.sizeDelta = new Vector2(720f, 980f);
+                panel.anchoredPosition = Vector2.zero;
 
                 var panelImage = EnsureImage(panel.gameObject, out bool pImgNew);
-                if (pImgNew) panelImage.color = Color.white;
+                if (pImgNew) panelImage.color = new Color(0.1f, 0.15f, 0.22f, 0.96f);
             }
 
-            EnsureTitleText(panel, "AYARLAR");
+            EnsureLabel(panel, "TitleText", "AYARLAR", new Vector2(0f, -88f));  
 
             if (closeButton == null)
             {
-                var closeRect = EnsureRectTransform(panel, "CloseButton", true, out _);
-                closeButton = closeRect.GetComponent<Button>();
-                if (closeButton == null) closeButton = closeRect.gameObject.AddComponent<Button>();
-            }
-            if (closeButton != null)
-            {
-                var closeRect = closeButton.transform as RectTransform;
-                if (closeRect != null)
+                var closeRect = EnsureRectTransform(panel, "CloseButton", true, out bool cNew);
+                if (cNew)
                 {
                     closeRect.anchorMin = new Vector2(1f, 1f);
                     closeRect.anchorMax = new Vector2(1f, 1f);
-                    closeRect.pivot = new Vector2(0.5f, 0.5f);
-                    closeRect.sizeDelta = new Vector2(76f, 76f);
-                    closeRect.anchoredPosition = new Vector2(-22f, -22f);
-                }
+                    closeRect.pivot = new Vector2(1f, 1f);
+                    closeRect.sizeDelta = new Vector2(110f, 110f);
+                    closeRect.anchoredPosition = new Vector2(-28f, -28f);
 
-                DeleteChildIfFound(closeButton.transform, "CloseText");
-                DeleteChildIfFound(closeButton.transform, "LabelText");
+                    var closeImage = EnsureImage(closeRect.gameObject, out bool cImgNew);
+                    if (cImgNew) closeImage.color = new Color(0.2f, 0.3f, 0.45f, 1f);
+                }
             }
             
-            BuildToggleImageRow(panel, "SoundRow", "SES", -175f, ref soundButton, ref soundOnImage, ref soundOffImage, Color.white);
-            BuildToggleImageRow(panel, "VibrationRow", "TİTREŞİM", -305f, ref vibrationButton, ref vibrationOnImage, ref vibrationOffImage, Color.white);
-
-            EnsureLanguageSectionLabel(panel, "DİL");
-            EnsureLanguageButtons(panel);
+            BuildToggleImageRow(panel, "SoundRow", "SES", -250f, ref soundButton, ref soundOnImage, ref soundOffImage);
+            BuildToggleImageRow(panel, "VibrationRow", "TİTREŞİM", -400f, ref vibrationButton, ref vibrationOnImage, ref vibrationOffImage);
 
             HideReplayTutorialRow();
-            BuildActionRow(panel, "MoreGamesRow", "DİĞER UYGULAMALARIM", -604f, ref moreGamesButton);
-
-            ApplySettingsSprites();
+            BuildActionRow(panel, "MoreGamesRow", "DİĞER UYGULAMALARIM", -600f, ref moreGamesButton);
+            EnsureLanguageButtons(panel);
 
             if (!Application.isPlaying)
             {
                 RefreshUI();
                 RefreshTexts();
             }
-        }
-
-        private void ApplySettingsSprites()
-        {
-#if UNITY_EDITOR
-            if (panel == null) return;
-            Sprite Load(string fileName) => AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Images/UI/Settings/" + fileName);
-            var panelSprite = Load("panel_bg.png");
-            var rowSprite = Load("row_card.png");
-            var closeSprite = Load("btn_close.png");
-            var onSprite = Load("toggle_on.png");
-            var offSprite = Load("toggle_off.png");
-            activeLanguageSprite = Load("btn_lang_active.png");
-            inactiveLanguageSprite = Load("btn_lang_inactive.png");
-            var moreSprite = Load("btn_more_games.png");
-
-            SetImageSprite(panel, panelSprite, Image.Type.Sliced);
-            SetImageSprite(panel.Find("SoundRow"), rowSprite, Image.Type.Sliced);
-            SetImageSprite(panel.Find("VibrationRow"), rowSprite, Image.Type.Sliced);
-            SetImageSprite(panel.Find("MoreGamesRow"), moreSprite, Image.Type.Sliced);
-            SetImageSprite(panel.Find("CloseButton"), closeSprite, Image.Type.Simple);
-            SetImageSprite(panel.Find("SoundRow/ActionBtn/OnImage"), onSprite, Image.Type.Simple);
-            SetImageSprite(panel.Find("SoundRow/ActionBtn/OffImage"), offSprite, Image.Type.Simple);
-            SetImageSprite(panel.Find("VibrationRow/ActionBtn/OnImage"), onSprite, Image.Type.Simple);
-            SetImageSprite(panel.Find("VibrationRow/ActionBtn/OffImage"), offSprite, Image.Type.Simple);
-            turkishButtonImage = (panel.Find("TurkishButton") ?? panel.Find("Türkçe"))?.GetComponent<Image>();
-            englishButtonImage = (panel.Find("EnglishButton") ?? panel.Find("English"))?.GetComponent<Image>();
-            koreanButtonImage = (panel.Find("KoreanButton") ?? panel.Find("Korean"))?.GetComponent<Image>();
-            RefreshLanguageButtonVisuals(Application.isPlaying ? LanguageManager.Instance.CurrentLanguage : LanguageManager.Language.Turkish);
-#endif
-        }
-
-        private static void SetImageSprite(Transform target, Sprite sprite, Image.Type imageType)
-        {
-            if (target == null || sprite == null) return;
-            var image = target.GetComponent<Image>();
-            if (image == null) return;
-            image.sprite = sprite;
-            image.type = imageType;
-            image.color = Color.white;
         }
 
         private static void DeleteChildIfFound(Transform parent, string childName)
@@ -550,43 +469,49 @@ namespace BlockPuzzle.UnityAdapter.UI
                 row.gameObject.SetActive(false);
         }
 
-        private static void BuildToggleImageRow(Transform parent, string rowName, string labelText, float y, ref Button btn, ref GameObject onImage, ref GameObject offImage, Color bgColor)
+        private static void BuildToggleImageRow(Transform parent, string rowName, string labelText, float y, ref Button btn, ref GameObject onImage, ref GameObject offImage)
         {
-            var itemRect = EnsureRectTransform(parent, rowName, false, out _);
-            itemRect.anchorMin = new Vector2(0.5f, 1f);
-            itemRect.anchorMax = new Vector2(0.5f, 1f);
-            itemRect.pivot = new Vector2(0.5f, 1f);
-            itemRect.sizeDelta = new Vector2(650f, 112f);
-            itemRect.anchoredPosition = new Vector2(0f, y);
+            var itemRect = EnsureRectTransform(parent, rowName, false, out bool itemNew);
+            if (itemNew)
+            {
+                itemRect.anchorMin = new Vector2(0.5f, 1f);
+                itemRect.anchorMax = new Vector2(0.5f, 1f);
+                itemRect.pivot = new Vector2(0.5f, 1f);
+                itemRect.sizeDelta = new Vector2(620f, 120f);
+                itemRect.anchoredPosition = new Vector2(0f, y);
 
-            var image = EnsureImage(itemRect.gameObject, out _);
-            image.color = bgColor;
+                var image = EnsureImage(itemRect.gameObject, out bool isImgNew);
+                if(isImgNew) image.color = new Color(0.17f, 0.25f, 0.35f, 0.5f);
+            }
 
-            var labelRect = EnsureRectTransform(itemRect, "RowLabel", false, out _);
-            labelRect.anchorMin = new Vector2(0f, 0f);
-            labelRect.anchorMax = new Vector2(0.65f, 1f);
-            labelRect.pivot = new Vector2(0f, 0.5f);
-            labelRect.offsetMin = new Vector2(36f, 0f);
-            labelRect.offsetMax = Vector2.zero;
+            var labelRect = EnsureRectTransform(itemRect, "RowLabel", false, out bool labelNew);
+            if (labelNew)
+            {
+                labelRect.anchorMin = new Vector2(0f, 0f);
+                labelRect.anchorMax = new Vector2(0.6f, 1f);
+                labelRect.offsetMin = new Vector2(40f, 0f);
+                labelRect.offsetMax = Vector2.zero;
 
-            var label = labelRect.GetComponent<TextMeshProUGUI>();
-            if (label == null) label = labelRect.gameObject.AddComponent<TextMeshProUGUI>();
-            label.text = labelText;
-            label.horizontalAlignment = HorizontalAlignmentOptions.Left;
-            label.verticalAlignment = VerticalAlignmentOptions.Middle;
-            label.margin = Vector4.zero;
-            label.fontSize = 34f;
-            label.color = Color.white;
+                var label = labelRect.GetComponent<TextMeshProUGUI>();
+                if (label == null) label = labelRect.gameObject.AddComponent<TextMeshProUGUI>();
+                label.text = labelText;
+                label.alignment = TextAlignmentOptions.Left | TextAlignmentOptions.Midline;
+                label.fontSize = 48f;
+                label.color = Color.white;
+            }
 
-            var btnRect = EnsureRectTransform(itemRect, "ActionBtn", false, out _);
-            btnRect.anchorMin = new Vector2(1f, 0.5f);
-            btnRect.anchorMax = new Vector2(1f, 0.5f);
-            btnRect.pivot = new Vector2(1f, 0.5f);
-            btnRect.sizeDelta = new Vector2(120f, 60f);
-            btnRect.anchoredPosition = new Vector2(-28f, 0f);
+            var btnRect = EnsureRectTransform(itemRect, "ActionBtn", false, out bool btnNew);
+            if (btnNew)
+            {
+                btnRect.anchorMin = new Vector2(1f, 0.5f);
+                btnRect.anchorMax = new Vector2(1f, 0.5f);
+                btnRect.pivot = new Vector2(1f, 0.5f);
+                btnRect.sizeDelta = new Vector2(90f, 90f);
+                btnRect.anchoredPosition = new Vector2(-40f, 0f);
 
-            var btnBg = EnsureImage(btnRect.gameObject, out _);
-            btnBg.color = new Color(1f, 1f, 1f, 0f); // Transparent background
+                var btnBg = EnsureImage(btnRect.gameObject, out bool isBtnBgNew);
+                if(isBtnBgNew) btnBg.color = new Color(1f, 1f, 1f, 0f); // Transparent background
+            }
 
             if (btn == null)
             {
@@ -594,55 +519,23 @@ namespace BlockPuzzle.UnityAdapter.UI
                 if (btn == null) btn = btnRect.gameObject.AddComponent<Button>();
             }
 
-            var onRect = EnsureRectTransform(btnRect, "OnImage", false, out _);
-            StretchToParent(onRect);
-            var onImg = EnsureImage(onRect.gameObject, out _);
+            var onRect = EnsureRectTransform(btnRect, "OnImage", false, out bool onNew);
+            if (onNew)
+            {
+                StretchToParent(onRect);
+                var onImg = EnsureImage(onRect.gameObject, out bool isOnImgNew);
+                if(isOnImgNew) onImg.color = Color.white;
+            }
             if (onImage == null) onImage = onRect.gameObject;
 
-            var offRect = EnsureRectTransform(btnRect, "OffImage", false, out _);
-            StretchToParent(offRect);
-            var offImg = EnsureImage(offRect.gameObject, out _);
+            var offRect = EnsureRectTransform(btnRect, "OffImage", false, out bool offNew);
+            if (offNew)
+            {
+                StretchToParent(offRect);
+                var offImg = EnsureImage(offRect.gameObject, out bool isOffImgNew);
+                if(isOffImgNew) offImg.color = Color.white;
+            }
             if (offImage == null) offImage = offRect.gameObject;
-        }
-
-        private static void EnsureTitleText(Transform parent, string text)
-        {
-            var labelRect = EnsureRectTransform(parent, "TitleText", true, out _);
-            labelRect.anchorMin = new Vector2(0.5f, 1f);
-            labelRect.anchorMax = new Vector2(0.5f, 1f);
-            labelRect.pivot = new Vector2(0.5f, 1f);
-            labelRect.sizeDelta = new Vector2(520f, 60f);
-            labelRect.anchoredPosition = new Vector2(0f, -75f);
-
-            var tmp = labelRect.GetComponent<TextMeshProUGUI>();
-            if (tmp == null) tmp = labelRect.gameObject.AddComponent<TextMeshProUGUI>();
-            tmp.text = text;
-            tmp.horizontalAlignment = HorizontalAlignmentOptions.Center;
-            tmp.verticalAlignment = VerticalAlignmentOptions.Middle;
-            tmp.margin = Vector4.zero;
-            tmp.fontSize = 42f;
-            tmp.color = Color.white;
-            tmp.raycastTarget = false;
-        }
-
-        private static void EnsureLanguageSectionLabel(Transform parent, string text)
-        {
-            var labelRect = EnsureRectTransform(parent, "LanguageSectionLabel", false, out _);
-            labelRect.anchorMin = new Vector2(0.5f, 1f);
-            labelRect.anchorMax = new Vector2(0.5f, 1f);
-            labelRect.pivot = new Vector2(0.5f, 1f);
-            labelRect.sizeDelta = new Vector2(650f, 34f);
-            labelRect.anchoredPosition = new Vector2(0f, -442f);
-
-            var tmp = labelRect.GetComponent<TextMeshProUGUI>();
-            if (tmp == null) tmp = labelRect.gameObject.AddComponent<TextMeshProUGUI>();
-            tmp.text = text;
-            tmp.horizontalAlignment = HorizontalAlignmentOptions.Center;
-            tmp.verticalAlignment = VerticalAlignmentOptions.Middle;
-            tmp.margin = Vector4.zero;
-            tmp.fontSize = 26f;
-            tmp.color = Color.white;
-            tmp.raycastTarget = false;
         }
 
         private static void BuildToggleRow(Transform parent, string rowName, string labelText, float y, ref Button btn, ref TextMeshProUGUI statusTxt)
@@ -651,7 +544,7 @@ namespace BlockPuzzle.UnityAdapter.UI
             itemRect.anchorMin = new Vector2(0.5f, 1f);
             itemRect.anchorMax = new Vector2(0.5f, 1f);
             itemRect.pivot = new Vector2(0.5f, 1f);
-            itemRect.sizeDelta = new Vector2(650f, 112f);
+            itemRect.sizeDelta = new Vector2(620f, 120f);
             itemRect.anchoredPosition = new Vector2(0f, y);
 
             var image = EnsureImage(itemRect.gameObject, out bool isImgNew);
@@ -667,15 +560,15 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (label == null) label = labelRect.gameObject.AddComponent<TextMeshProUGUI>();
             label.text = labelText;
             label.alignment = TextAlignmentOptions.Left | TextAlignmentOptions.Midline;
-            label.fontSize = 38f;
+            label.fontSize = 48f;
             label.color = Color.white;
 
             var btnRect = EnsureRectTransform(itemRect, "ActionBtn", false);
             btnRect.anchorMin = new Vector2(1f, 0.5f);
             btnRect.anchorMax = new Vector2(1f, 0.5f);
             btnRect.pivot = new Vector2(1f, 0.5f);
-            btnRect.sizeDelta = new Vector2(120f, 60f);
-            btnRect.anchoredPosition = new Vector2(-28f, 0f);
+            btnRect.sizeDelta = new Vector2(220f, 80f);
+            btnRect.anchoredPosition = new Vector2(-20f, 0f);
 
             var btnBg = EnsureImage(btnRect.gameObject, out bool isBtnBgNew);
             if(isBtnBgNew) btnBg.color = new Color(0.2f, 0.3f, 0.45f, 1f);
@@ -700,15 +593,18 @@ namespace BlockPuzzle.UnityAdapter.UI
 
         private static void BuildActionRow(Transform parent, string rowName, string labelText, float y, ref Button btn)
         {
-            var btnRect = EnsureRectTransform(parent, rowName, false, out _);
-            btnRect.anchorMin = new Vector2(0.5f, 1f);
-            btnRect.anchorMax = new Vector2(0.5f, 1f);
-            btnRect.pivot = new Vector2(0.5f, 1f);
-            btnRect.sizeDelta = new Vector2(650f, 114f);
-            btnRect.anchoredPosition = new Vector2(0f, y);
+            var btnRect = EnsureRectTransform(parent, rowName, false, out bool isBtnNew);
+            if (isBtnNew)
+            {
+                btnRect.anchorMin = new Vector2(0.5f, 1f);
+                btnRect.anchorMax = new Vector2(0.5f, 1f);
+                btnRect.pivot = new Vector2(0.5f, 1f);
+                btnRect.sizeDelta = new Vector2(620f, 120f);
+                btnRect.anchoredPosition = new Vector2(0f, y);
+            }
 
             var btnBg = EnsureImage(btnRect.gameObject, out bool isBtnBgNew);
-            if (isBtnBgNew) btnBg.color = new Color(0.95f, 0.63f, 0.07f, 1f);
+            if(isBtnBgNew) btnBg.color = new Color(0.15f, 0.45f, 0.25f, 0.9f);
 
             if (btn == null)
             {
@@ -716,19 +612,22 @@ namespace BlockPuzzle.UnityAdapter.UI
                 if (btn == null) btn = btnRect.gameObject.AddComponent<Button>();
             }
 
-            var btnLabelRect = EnsureRectTransform(btnRect, "RowLabel", false, out _);
-            StretchToParent(btnLabelRect);
-            btnLabelRect.offsetMin = new Vector2(16f, 4f);
-            btnLabelRect.offsetMax = new Vector2(-16f, 0f);
+            var btnLabelRect = EnsureRectTransform(btnRect, "RowLabel", false, out bool isLabelRectNew);
+            if (isLabelRectNew)
+            {
+                StretchToParent(btnLabelRect);
+            }
 
             var btnLabel = btnLabelRect.GetComponent<TextMeshProUGUI>();
-            if (btnLabel == null) btnLabel = btnLabelRect.gameObject.AddComponent<TextMeshProUGUI>();
-            btnLabel.text = labelText;
-            btnLabel.horizontalAlignment = HorizontalAlignmentOptions.Center;
-            btnLabel.verticalAlignment = VerticalAlignmentOptions.Middle;
-            btnLabel.margin = Vector4.zero;
-            btnLabel.fontSize = 32f;
-            btnLabel.color = Color.white;
+            bool isLabelNew = (btnLabel == null);
+            if (isLabelNew) btnLabel = btnLabelRect.gameObject.AddComponent<TextMeshProUGUI>();
+            if (isLabelNew)
+            {
+                btnLabel.text = labelText;
+                btnLabel.alignment = TextAlignmentOptions.Center;
+                btnLabel.fontSize = 48f;
+                btnLabel.color = Color.white;
+            }
         }
 
         private static RectTransform EnsureRectTransform(Transform parent, string name, bool topMost, out bool isNew)
@@ -816,12 +715,6 @@ namespace BlockPuzzle.UnityAdapter.UI
         {
             if (panel == null) return;
 
-            // Keep the skin usable when the scene has not yet had its Inspector references rebound.
-            if (activeLanguageSprite == null)
-                activeLanguageSprite = Resources.Load<Sprite>("SettingsUI/professional-v1/language_selected");
-            if (inactiveLanguageSprite == null)
-                inactiveLanguageSprite = Resources.Load<Sprite>("SettingsUI/professional-v1/language_unselected");
-
             LanguageButton trBtn = null;
             LanguageButton enBtn = null;
             LanguageButton koBtn = null;
@@ -905,19 +798,13 @@ namespace BlockPuzzle.UnityAdapter.UI
             ConfigureLanguageButtonObject(enBtn, "İngilizce", "English", "영어");
             ConfigureLanguageButtonObject(koBtn, "Korece", "Korean", "한국어");
 
-            turkishButtonImage = trBtn != null ? trBtn.GetComponent<Image>() : null;
-            englishButtonImage = enBtn != null ? enBtn.GetComponent<Image>() : null;
-            koreanButtonImage = koBtn != null ? koBtn.GetComponent<Image>() : null;
-            var currentLang = Application.isPlaying ? LanguageManager.Instance.CurrentLanguage : LanguageManager.Language.Turkish;
-            RefreshLanguageButtonVisuals(currentLang);
+            float buttonsY = -750f;
+            float buttonWidth = 190f;
+            float buttonHeight = 70f;
 
-            float buttonsY = -494f;
-            float buttonWidth = 204f;
-            float buttonHeight = 82f;
-
-            if (trBtn != null) PositionLanguageButton(trBtn.GetComponent<RectTransform>(), -216f, buttonsY, buttonWidth, buttonHeight);
-            if (enBtn != null) PositionLanguageButton(enBtn.GetComponent<RectTransform>(), 0f, buttonsY, buttonWidth, buttonHeight);
-            if (koBtn != null) PositionLanguageButton(koBtn.GetComponent<RectTransform>(), 216f, buttonsY, buttonWidth, buttonHeight);
+            PositionLanguageButton(trBtn.GetComponent<RectTransform>(), -210f, buttonsY, buttonWidth, buttonHeight);
+            PositionLanguageButton(enBtn.GetComponent<RectTransform>(), 0f, buttonsY, buttonWidth, buttonHeight);
+            PositionLanguageButton(koBtn.GetComponent<RectTransform>(), 210f, buttonsY, buttonWidth, buttonHeight);
         }
 
         private void ConfigureLanguageButtonObject(LanguageButton langBtn, string trText, string enText, string koText)
@@ -932,7 +819,7 @@ namespace BlockPuzzle.UnityAdapter.UI
             var img = go.GetComponent<Image>();
             if (img == null) img = go.AddComponent<Image>();
 
-            img.color = Color.white;
+            img.color = new Color(0.13f, 0.43f, 0.98f, 1f);
 
             btn.targetGraphic = img;
             ColorBlock colors = btn.colors;
@@ -950,17 +837,9 @@ namespace BlockPuzzle.UnityAdapter.UI
                 var txt = txtTransform.GetComponent<TextMeshProUGUI>();
                 if (txt != null)
                 {
-                    txt.horizontalAlignment = HorizontalAlignmentOptions.Center;
-                    txt.verticalAlignment = VerticalAlignmentOptions.Middle;
-                    txt.margin = Vector4.zero;
-                    txt.fontSize = 30f;
+                    txt.alignment = TextAlignmentOptions.Center;
+                    txt.fontSize = 28f;
                     txt.color = Color.white;
-                    var langFont = ResolveFontForLanguage(Application.isPlaying ? LanguageManager.Instance.CurrentLanguage : LanguageManager.Language.Turkish);
-                    if (langFont != null)
-                    {
-                        txt.font = langFont;
-                        if (langFont.material != null) txt.fontSharedMaterial = langFont.material;
-                    }
                 }
 
                 var loc = txtTransform.GetComponent<LocalizedText>();
@@ -972,9 +851,8 @@ namespace BlockPuzzle.UnityAdapter.UI
                 {
                     rect.anchorMin = Vector2.zero;
                     rect.anchorMax = Vector2.one;
-                    // Visual compensation for 3D bottom bevel of button sprite
-                    rect.offsetMin = new Vector2(4f, 4f);
-                    rect.offsetMax = new Vector2(-4f, 0f);
+                    rect.offsetMin = Vector2.zero;
+                    rect.offsetMax = Vector2.zero;
                 }
             }
 
@@ -985,43 +863,9 @@ namespace BlockPuzzle.UnityAdapter.UI
         {
             rect.anchorMin = new Vector2(0.5f, 1f);
             rect.anchorMax = new Vector2(0.5f, 1f);
-            rect.pivot = new Vector2(0.5f, 1f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
             rect.sizeDelta = new Vector2(w, h);
             rect.anchoredPosition = new Vector2(x, y);
         }
-
-        [ContextMenu("Apply Clean Layout")]
-        public void ApplyCleanLayout()
-        {
-            EnsureHierarchy();
-#if UNITY_EDITOR
-            if (!Application.isPlaying)
-            {
-                UnityEditor.EditorUtility.SetDirty(this);
-                if (panel != null) UnityEditor.EditorUtility.SetDirty(panel);
-                UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(gameObject.scene);
-            }
-#endif
-        }
-
-#if UNITY_EDITOR
-        [MenuItem("Tools/BlokDunyasi/UI/Apply Settings Popup Layout")]
-        public static void ApplyCleanLayoutMenu()
-        {
-            var views = UnityEngine.Object.FindObjectsByType<MainMenuSettingsPopupView>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            if (views != null && views.Length > 0)
-            {
-                foreach (var v in views)
-                {
-                    v.ApplyCleanLayout();
-                }
-                Debug.Log("[MainMenuSettingsPopupView] Applied clean layout to " + views.Length + " SettingsPopupView instances in active scene.");
-            }
-            else
-            {
-                Debug.LogWarning("[MainMenuSettingsPopupView] No MainMenuSettingsPopupView found in active scene.");
-            }
-        }
-#endif
     }
 }

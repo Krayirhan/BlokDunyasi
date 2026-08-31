@@ -1,4 +1,5 @@
 // File: UnityAdapter/UI/GameOverView.cs
+#pragma warning disable 0414
 
 using UnityEngine;
 using UnityEngine.UI;
@@ -77,7 +78,7 @@ namespace BlockPuzzle.UnityAdapter.UI
         [SerializeField] private bool playBoardExplosionOnFinalGameOver = false;
         [SerializeField] [Min(0.1f)] private float boardExplosionDuration = 2f;
         [SerializeField] private bool finalExplosionRandomizeOrder = true;
-        [SerializeField] [Min(1)] private int finalExplosionCellsPerTick = 3;
+        [SerializeField] [Min(1)] private int finalExplosionCellsPerTick = 1;
         [SerializeField] [Min(1)] private int finalExplosionCenterBurstCombo = 4;
         [SerializeField] [Min(1)] private int finalExplosionPerCellBurstCombo = 6;
         [SerializeField] private bool finalExplosionEmitLineClearBursts = true;
@@ -87,22 +88,14 @@ namespace BlockPuzzle.UnityAdapter.UI
         [SerializeField] private bool verboseLogs = true;
 
         [SerializeField] private GameBootstrap _gameBootstrap;
+        private ContinueOfferController _continueController;
         private CanvasGroup _canvasGroup;
         private bool _subscribed;
         private int _sessionHighestCombo;
         private int _sessionBestMoveDelta;
-        private int _continuesUsedThisRun;
-        private bool _continueOfferActive;
-        private bool _waitingRewardedResult;
-        private bool _queuedRewardedAdShow;
-        private bool _rewardEarned;
         private bool _isFinishingGameOver;
         private bool _restartActsAsContinue;
         private int _pendingFinalScore;
-        private Coroutine _continueCountdownRoutine;
-        private Coroutine _rewardedLoadTimeoutRoutine;
-        private float _continueCountdownRemaining;
-        private bool _adCallbacksHooked;
         [SerializeField] private SimpleGridView _gridView;
         private string _lastTrackedGuidanceCode = string.Empty;
         private string _lastTrackedRiskSnapshotCode = string.Empty;
@@ -131,47 +124,54 @@ namespace BlockPuzzle.UnityAdapter.UI
 
         private void Awake()
         {
-            NormalizeContinueOfferSettings();
-
-            // 1) Panel referansı yoksa "kendi GameObject'i" panel kabul et
             if (gameOverPanel == null)
                 gameOverPanel = this.gameObject;
             EnsurePanelOnTop();
 
-            // 2) CanvasGroup garanti
             _canvasGroup = gameOverPanel.GetComponent<CanvasGroup>();
             if (_canvasGroup == null)
                 _canvasGroup = gameOverPanel.AddComponent<CanvasGroup>();
 
-            // 3) Bootstrap bul
             EnsureBootstrap();
             EnsurePanelOnTop();
 
-            // 4) Dedicated GameOver scene için zengin layout kur
             TryBuildDedicatedSceneLayout();
             TryBuildInGameContinueOfferLayout();
 
             EnsureEventSystemIfMissing();
-
-            // 4) UI referanslarını (opsiyonel) otomatik bul
             AutoWireIfMissing();
+            ResolveGridViewDependency();
 
-            ResolveContinueDependencies();
+            _continueController = new ContinueOfferController(
+                coroutineHost: this,
+                gameBootstrap: _gameBootstrap,
+                gridView: _gridView,
+                continueOfferPanel: continueOfferPanel,
+                noMovesLabel: noMovesLabel,
+                continueCountdownText: continueCountdownText,
+                continueButton: continueButton,
+                enableContinueOffer: enableContinueOffer,
+                continueCountdownSeconds: continueCountdownSeconds,
+                rewardedLoadTimeoutSeconds: rewardedLoadTimeoutSeconds,
+                rewardedLoadingMessage: rewardedLoadingMessage,
+                rewardedOpeningMessage: rewardedOpeningMessage,
+                rewardedLoadFailedMessage: rewardedLoadFailedMessage,
+                noMovesMessage: noMovesMessage,
+                rewardedLoadingMessageEnglish: rewardedLoadingMessageEnglish,
+                rewardedOpeningMessageEnglish: rewardedOpeningMessageEnglish,
+                rewardedLoadFailedMessageEnglish: rewardedLoadFailedMessageEnglish,
+                noMovesMessageEnglish: noMovesMessageEnglish,
+                canLog: () => CanLog);
 
-            // 5) Event'lere subscribe
+            _continueController.FinalGameOverRequested += OnFinalGameOverFromController;
+            _continueController.HideRequested += OnHideFromController;
+            _continueController.ContinueSucceeded += () => { if (CanLog) Debug.Log("[GameOverView] Continue flow succeeded via controller."); };
+
             SubscribeOnce();
-
-            // 6) Button listener'ları
             SetupButtonListeners();
             ConfigureInteractiveUi();
-
-            // 7) Başlangıçta paneli gizle
             HideGameOverScreenImmediate();
-
-            // 8) UI altyapısını diagnostik et
             DiagnoseUiPipeline("Awake");
-
-            // 9) Lokalizasyon setup'ını yap
             SetupGameLocalization();
         }
 
@@ -182,9 +182,24 @@ namespace BlockPuzzle.UnityAdapter.UI
 
         private void OnDestroy()
         {
+            if (_continueController != null)
+            {
+                _continueController.FinalGameOverRequested -= OnFinalGameOverFromController;
+                _continueController.HideRequested -= OnHideFromController;
+                _continueController.Cleanup();
+            }
             UnsubscribeOnce();
             RemoveButtonListeners();
-            UnhookAdCallbacks();
+        }
+
+        private void OnFinalGameOverFromController(int finalScore)
+        {
+            BeginFinalGameOver(finalScore);
+        }
+
+        private void OnHideFromController()
+        {
+            HideGameOverScreenImmediate();
         }
 
         // -------------------------------------------------------
@@ -405,10 +420,10 @@ namespace BlockPuzzle.UnityAdapter.UI
             SetupGameLocalization();
 
             if (noMovesLabel != null)
-                noMovesLabel.text = GetNoMovesMessage();
+                noMovesLabel.text = "Hamlen Kalmadi!";
 
             if (continueCountdownText != null)
-                continueCountdownText.text = GetContinueOfferSubtitle();
+                continueCountdownText.text = "Reklam izlemek için 5 saniyen var";
         }
 #endif
 
@@ -482,7 +497,7 @@ namespace BlockPuzzle.UnityAdapter.UI
             ShowGameOverScreen(payload.FinalScore, payload.IsNewBest);
         }
 
-        private void ResolveContinueDependencies()
+        private void ResolveGridViewDependency()
         {
             if (_gridView == null)
             {
@@ -493,8 +508,6 @@ namespace BlockPuzzle.UnityAdapter.UI
                     Debug.LogWarning("[GameOverView] _gridView was resolved via runtime lookup. Inspector wiring is the preferred production path.");
                 }
             }
-
-            HookAdCallbacks();
         }
 
         private void OnValidate()
@@ -515,34 +528,6 @@ namespace BlockPuzzle.UnityAdapter.UI
             return instances.Length == 1 ? instances[0] : null;
         }
 #endif
-
-        private void HookAdCallbacks()
-        {
-            if (_adCallbacksHooked)
-                return;
-
-            RewardedAdBridge.RewardedUserEarned -= HandleRewardedUserEarned;
-            RewardedAdBridge.RewardedUserEarned += HandleRewardedUserEarned;
-            RewardedAdBridge.RewardedAdLoaded -= HandleRewardedAdLoaded;
-            RewardedAdBridge.RewardedAdLoaded += HandleRewardedAdLoaded;
-            RewardedAdBridge.RewardedAdClosed -= HandleRewardedAdClosed;
-            RewardedAdBridge.RewardedAdClosed += HandleRewardedAdClosed;
-            RewardedAdBridge.RewardedAdFailedToLoad -= HandleRewardedAdFailedToLoad;
-            RewardedAdBridge.RewardedAdFailedToLoad += HandleRewardedAdFailedToLoad;
-            _adCallbacksHooked = true;
-        }
-
-        private void UnhookAdCallbacks()
-        {
-            if (!_adCallbacksHooked)
-                return;
-
-            RewardedAdBridge.RewardedUserEarned -= HandleRewardedUserEarned;
-            RewardedAdBridge.RewardedAdLoaded -= HandleRewardedAdLoaded;
-            RewardedAdBridge.RewardedAdClosed -= HandleRewardedAdClosed;
-            RewardedAdBridge.RewardedAdFailedToLoad -= HandleRewardedAdFailedToLoad;
-            _adCallbacksHooked = false;
-        }
 
         private void DiagnoseUiPipeline(string where)
         {
@@ -579,8 +564,6 @@ namespace BlockPuzzle.UnityAdapter.UI
             {
                 restartButton.onClick.RemoveAllListeners();
                 restartButton.onClick.AddListener(HandleRestartOrContinueButtonClicked);
-
-                if (CanLog) Debug.Log("[GameOverView] RestartButton listener added (click -> RestartGame)");
             }
             else if (requiresSceneActionButtons)
             {
@@ -590,26 +573,17 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (mainMenuButton != null)
             {
                 mainMenuButton.onClick.RemoveAllListeners();
-                mainMenuButton.onClick.AddListener(() =>
-                {
-                if (CanLog) Debug.Log("[GameOverView] MainMenuButton CLICK received");
-                    ReturnToMainMenu();
-                });
-
-                if (CanLog) Debug.Log("[GameOverView] MainMenuButton listener added (click -> ReturnToMainMenu)");
+                mainMenuButton.onClick.AddListener(HandleMainMenuButtonClicked);
             }
             else if (requiresSceneActionButtons)
             {
                 Debug.LogWarning("[GameOverView] MainMenuButton NULL. Inspector'dan bağla veya isimle bulunamadı.");
             }
 
-            if (continueButton != null)
+            if (continueButton != null && continueButton != restartButton)
             {
-                if (continueButton != restartButton)
-                {
-                    continueButton.onClick.RemoveAllListeners();
-                    continueButton.onClick.AddListener(HandleContinueButtonClicked);
-                }
+                continueButton.onClick.RemoveAllListeners();
+                continueButton.onClick.AddListener(() => _continueController?.HandleContinueButtonClicked());
             }
 
             _restartActsAsContinue = continueButton != null && continueButton == restartButton;
@@ -617,7 +591,7 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (rescueButton != null)
             {
                 rescueButton.onClick.RemoveAllListeners();
-                rescueButton.onClick.AddListener(HandleRescueButtonClicked);
+                rescueButton.onClick.AddListener(() => _continueController?.HandleRescueButtonClicked());
                 rescueButton.interactable = _gameBootstrap != null && _gameBootstrap.RescueTokensRemaining > 0;
             }
         }
@@ -693,8 +667,8 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (CanLog) Debug.Log("[GameOverView] OnGameStarted -> hide panel");
             _sessionHighestCombo = 0;
             _sessionBestMoveDelta = 0;
-            _continuesUsedThisRun = 0;
             _isFinishingGameOver = false;
+            _continueController?.Reset();
             HideGameOverScreenImmediate();
         }
 
@@ -713,11 +687,12 @@ namespace BlockPuzzle.UnityAdapter.UI
                 Debug.Log($"[GameOverView] OnGameOver RECEIVED! FinalScore: {finalScore}");
 
             _pendingFinalScore = finalScore;
+            ShowGameOverScreen(finalScore);
 
-            if (TryStartContinueOffer(finalScore))
+            if (_continueController != null && _continueController.TryStart(finalScore))
                 return;
 
-            if (TryShowContinueUnavailableOffer(finalScore))
+            if (_continueController != null && _continueController.TryFinalizeWhenUnavailable(finalScore))
                 return;
 
             BeginFinalGameOver(finalScore);
@@ -791,13 +766,18 @@ namespace BlockPuzzle.UnityAdapter.UI
                     riskSnapshot);
             }
 
-            ApplyGuidanceHint(_gameBootstrap != null ? _gameBootstrap.LastGameOverGuidanceCode : string.Empty);
+             ApplyGuidanceHint(
+                 _gameBootstrap != null ? _gameBootstrap.LastGameOverGuidanceCode : string.Empty,
+                 finalScore,
+                 bestScore);
 
-            bool hasPayload = GameOverScenePayload.TryGet(out var payload);
-            if (hasPayload || IsRichDedicatedSceneLayoutActive())
-            {
-                var payloadState = _gameBootstrap != null ? _gameBootstrap.CurrentState : null;
-                int payloadBestScore = hasPayload ? payload.BestScore : (_gameBootstrap != null ? _gameBootstrap.BestScore : finalScore);
+             bool hasPayload = GameOverScenePayload.TryGet(out var payload);
+             int guidanceBestScore = bestScore;
+             if (hasPayload || IsRichDedicatedSceneLayoutActive())
+             {
+                 var payloadState = _gameBootstrap != null ? _gameBootstrap.CurrentState : null;
+                 int payloadBestScore = hasPayload ? payload.BestScore : (_gameBootstrap != null ? _gameBootstrap.BestScore : finalScore);
+                 guidanceBestScore = payloadBestScore;
                 int payloadMoveCount = hasPayload ? payload.MoveCount : (payloadState?.MoveCount ?? 0);
                 int payloadLinesCleared = hasPayload ? payload.TotalLinesCleared : (payloadState?.TotalLinesCleared ?? 0);
                 int payloadBestMoveDelta = hasPayload ? payload.SessionBestMoveDelta : _sessionBestMoveDelta;
@@ -845,7 +825,10 @@ namespace BlockPuzzle.UnityAdapter.UI
                 }
             }
 
-            ApplyGuidanceHint(_gameBootstrap != null ? _gameBootstrap.LastGameOverGuidanceCode : string.Empty);
+             ApplyGuidanceHint(
+                 _gameBootstrap != null ? _gameBootstrap.LastGameOverGuidanceCode : string.Empty,
+                 finalScore,
+                 guidanceBestScore);
             TrackRiskSnapshotIfNeeded(_gameBootstrap != null ? _gameBootstrap.LastGameOverRiskSnapshotCode : string.Empty);
 
             DiagnoseUiPipeline("ShowGameOverScreen");
@@ -893,505 +876,117 @@ namespace BlockPuzzle.UnityAdapter.UI
                 gameOverPanel.SetActive(false);
             }
 
-            SetContinueOfferVisible(false);
-            _continueOfferActive = false;
-            _waitingRewardedResult = false;
-            _queuedRewardedAdShow = false;
-            _rewardEarned = false;
+            _continueController?.Reset();
             _isFinishingGameOver = false;
-            _continueCountdownRemaining = 0f;
             _lastTrackedGuidanceCode = string.Empty;
             _lastTrackedRiskSnapshotCode = string.Empty;
 
-            if (_continueCountdownRoutine != null)
-            {
-                StopCoroutine(_continueCountdownRoutine);
-                _continueCountdownRoutine = null;
-            }
-
-            if (_rewardedLoadTimeoutRoutine != null)
-            {
-                StopCoroutine(_rewardedLoadTimeoutRoutine);
-                _rewardedLoadTimeoutRoutine = null;
-            }
-
-            // Bir dahaki açılışta alpha 0 / raycast kilidi olmasın
             _canvasGroup.alpha = 1f;
             _canvasGroup.interactable = true;
             _canvasGroup.blocksRaycasts = true;
         }
 
-        private bool TryStartContinueOffer(int finalScore)
-        {
-            if (!enableContinueOffer)
-                return false;
-
-            if (!HasContinueQuotaRemaining())
-                return false;
-
-            if (continueOfferPanel == null)
-                return false;
-
-            _pendingFinalScore = finalScore;
-            _continueOfferActive = true;
-            _waitingRewardedResult = false;
-            _queuedRewardedAdShow = false;
-            _rewardEarned = false;
-            _continueCountdownRemaining = Mathf.Max(1f, continueCountdownSeconds);
-            SetContinueOfferAdUiVisible(true);
-
-            if (gameOverPanel != null)
-            {
-                gameOverPanel.SetActive(true);
-                _canvasGroup.alpha = 1f;
-                _canvasGroup.interactable = true;
-                _canvasGroup.blocksRaycasts = true;
-            }
-
-            if (noMovesLabel != null)
-                noMovesLabel.text = GetNoMovesMessage();
-
-            UpdateContinueCountdownText(_continueCountdownRemaining);
-
-            SetContinueOfferVisible(true);
-            EmitContinueTelemetry("continue_offer_shown");
-
-            if (continueButton != null)
-            {
-                // Do not hard-disable the button while the next rewarded ad is still reloading.
-                // The click handler already falls back safely if no ad is ready yet.
-                ConfigureButtonHitTarget(continueButton);
-                continueButton.interactable = true;
-            }
-
-            if (noMovesLabel != null)
-                noMovesLabel.raycastTarget = false;
-
-            if (continueCountdownText != null)
-                continueCountdownText.raycastTarget = false;
-
-            if (_continueCountdownRoutine != null)
-                StopCoroutine(_continueCountdownRoutine);
-
-            if (_rewardedLoadTimeoutRoutine != null)
-            {
-                StopCoroutine(_rewardedLoadTimeoutRoutine);
-                _rewardedLoadTimeoutRoutine = null;
-            }
-
-            _continueCountdownRoutine = StartCoroutine(ContinueCountdownRoutine());
-            return true;
-        }
-
-        private bool TryShowContinueUnavailableOffer(int finalScore)
-        {
-            if (!enableContinueOffer)
-                return false;
-
-            if (HasContinueQuotaRemaining())
-                return false;
-
-            if (continueOfferPanel == null)
-                return false;
-
-            _pendingFinalScore = finalScore;
-            _continueOfferActive = false;
-            _waitingRewardedResult = false;
-            _queuedRewardedAdShow = false;
-            _rewardEarned = false;
-            _continueCountdownRemaining = 0f;
-            SetContinueOfferAdUiVisible(false);
-
-            if (_continueCountdownRoutine != null)
-            {
-                StopCoroutine(_continueCountdownRoutine);
-                _continueCountdownRoutine = null;
-            }
-
-            if (_rewardedLoadTimeoutRoutine != null)
-            {
-                StopCoroutine(_rewardedLoadTimeoutRoutine);
-                _rewardedLoadTimeoutRoutine = null;
-            }
-
-            if (gameOverPanel != null)
-            {
-                gameOverPanel.SetActive(true);
-                _canvasGroup.alpha = 1f;
-                _canvasGroup.interactable = true;
-                _canvasGroup.blocksRaycasts = true;
-            }
-
-            if (noMovesLabel != null)
-                noMovesLabel.text = GetNoMovesMessage();
-
-            if (continueCountdownText != null)
-                continueCountdownText.text = GetContinueOfferUnavailableMessage();
-
-            if (noMovesLabel != null)
-                noMovesLabel.raycastTarget = false;
-
-            if (continueCountdownText != null)
-                continueCountdownText.raycastTarget = false;
-
-            SetContinueOfferVisible(true);
-            EmitContinueTelemetry("continue_offer_exhausted");
-            return true;
-        }
-
-        private IEnumerator ContinueCountdownRoutine()
-        {
-            _continueCountdownRemaining = Mathf.Max(1f, _continueCountdownRemaining <= 0f
-                ? continueCountdownSeconds
-                : _continueCountdownRemaining);
-
-            while (_continueCountdownRemaining > 0f && _continueOfferActive)
-            {
-                UpdateContinueCountdownText(_continueCountdownRemaining);
-                yield return null;
-
-                if (_waitingRewardedResult)
-                    continue;
-
-                _continueCountdownRemaining -= Time.unscaledDeltaTime;
-            }
-
-            _continueCountdownRoutine = null;
-
-            if (_continueOfferActive && !_waitingRewardedResult)
-                BeginFinalGameOver(_pendingFinalScore);
-        }
-
-        private void UpdateContinueCountdownText(float remainingSeconds)
-        {
-            if (continueCountdownText == null)
-                return;
-
-            int seconds = Mathf.CeilToInt(Mathf.Max(0f, remainingSeconds));
-            continueCountdownText.text = FormatContinueCountdown(seconds);
-        }
-
-        private void HandleContinueButtonClicked()
-        {
-            if (CanLog)
-                Debug.Log("[GameOverView] HandleContinueButtonClicked() called");
-            
-            if (!_continueOfferActive || _waitingRewardedResult)
-                return;
-
-            if (!IsRewardedAdReady())
-            {
-                if (CanLog)
-                    Debug.LogWarning("[GameOverView] Rewarded ad not ready yet. Waiting for load...");
-
-                EmitContinueTelemetry("continue_clicked_waiting_ad");
-                _waitingRewardedResult = true;
-                _queuedRewardedAdShow = true;
-                _rewardEarned = false;
-
-                if (continueButton != null)
-                    continueButton.interactable = false;
-
-                if (_continueCountdownRoutine != null)
-                {
-                    StopCoroutine(_continueCountdownRoutine);
-                    _continueCountdownRoutine = null;
-                }
-
-                if (noMovesLabel != null)
-                    noMovesLabel.text = GetRewardedLoadingMessage();
-
-                if (_rewardedLoadTimeoutRoutine != null)
-                    StopCoroutine(_rewardedLoadTimeoutRoutine);
-
-                _rewardedLoadTimeoutRoutine = StartCoroutine(RewardedLoadTimeoutRoutine());
-                HookAdCallbacks();
-                return;
-            }
-
-            if (CanLog)
-                Debug.Log("[GameOverView] Rewarded ad is ready. Showing now.");
-            _waitingRewardedResult = true;
-            _queuedRewardedAdShow = false;
-            _rewardEarned = false;
-            EmitContinueTelemetry("continue_clicked");
-
-            if (continueButton != null)
-                continueButton.interactable = false;
-
-            if (_continueCountdownRoutine != null)
-            {
-                StopCoroutine(_continueCountdownRoutine);
-                _continueCountdownRoutine = null;
-            }
-
-            if (noMovesLabel != null)
-                noMovesLabel.text = GetRewardedOpeningMessage();
-
-            if (_rewardedLoadTimeoutRoutine != null)
-            {
-                StopCoroutine(_rewardedLoadTimeoutRoutine);
-                _rewardedLoadTimeoutRoutine = null;
-            }
-
-            ShowRewardedAd();
-        }
-
         private void HandleRestartOrContinueButtonClicked()
         {
-            if (_continueOfferActive && _restartActsAsContinue)
+            if (_restartActsAsContinue && _continueController != null && _continueController.IsOfferActive)
             {
-                if (CanLog) Debug.Log("[GameOverView] Continue button click routed via RestartButton");
-                HandleContinueButtonClicked();
+                _continueController.HandleContinueButtonClicked();
                 return;
             }
 
-            if (CanLog) Debug.Log("[GameOverView] RestartButton CLICK received");
             RestartGame();
-        }
-
-        private void HandleRescueButtonClicked()
-        {
-            if (_gameBootstrap == null)
-                return;
-
-            bool rescued = _gameBootstrap.TryUseRescueToken();
-            if (rescued)
-            {
-                EmitContinueTelemetry("rescue_token_success");
-                HideGameOverScreenImmediate();
-                return;
-            }
-
-            EmitContinueTelemetry("rescue_token_failed");
-        }
-
-        private void HandleRewardedAdLoaded()
-        {
-            if (!_continueOfferActive)
-                return;
-
-            if (_queuedRewardedAdShow)
-            {
-                if (CanLog)
-                    Debug.Log("[GameOverView] Rewarded ad finished loading while continue offer is active. Showing ad now.");
-
-                if (_rewardedLoadTimeoutRoutine != null)
-                {
-                    StopCoroutine(_rewardedLoadTimeoutRoutine);
-                    _rewardedLoadTimeoutRoutine = null;
-                }
-
-                if (noMovesLabel != null)
-                    noMovesLabel.text = GetRewardedOpeningMessage();
-
-                ShowRewardedAd();
-                return;
-            }
-
-            if (_waitingRewardedResult)
-                return;
-
-            if (noMovesLabel != null)
-                noMovesLabel.text = GetNoMovesMessage();
-
-            if (continueButton != null)
-                continueButton.interactable = true;
-        }
-
-        private bool IsRewardedAdReady()
-        {
-            if (!RewardedAdBridge.HasProvider)
-            {
-                Debug.LogError("[GameOverView] CRITICAL: Rewarded ad bridge provider is missing!");
-                return false;
-            }
-
-            bool ready = RewardedAdBridge.IsReady();
-            if (CanLog)
-                Debug.Log($"[GameOverView] IsRewardedAdReady() = {ready}");
-            return ready;
-        }
-
-        private void ShowRewardedAd()
-        {
-            if (CanLog)
-                Debug.Log("[GameOverView] ShowRewardedAd() called");
-            HookAdCallbacks();
-
-            if (!RewardedAdBridge.HasProvider)
-            {
-                Debug.LogError("[GameOverView] CRITICAL: Cannot show rewarded ad - bridge provider missing!");
-                return;
-            }
-
-            if (CanLog)
-                Debug.Log("[GameOverView] Showing rewarded ad via AdMobManager.");
-            RewardedAdBridge.Show();
-        }
-
-        private IEnumerator RewardedLoadTimeoutRoutine()
-        {
-            yield return new WaitForSecondsRealtime(rewardedLoadTimeoutSeconds);
-            _rewardedLoadTimeoutRoutine = null;
-
-            if (!_continueOfferActive || !_waitingRewardedResult || !_queuedRewardedAdShow)
-                yield break;
-
-            HandleRewardedAdFailedToLoad("timeout");
-        }
-
-        private void HandleRewardedAdFailedToLoad(string errorMessage)
-        {
-            if (!_continueOfferActive)
-                return;
-
-            if (CanLog)
-                Debug.LogWarning($"[GameOverView] Rewarded ad failed to load during continue flow: {errorMessage}");
-
-            EmitContinueTelemetry(string.Equals(errorMessage, "timeout", StringComparison.OrdinalIgnoreCase)
-                ? "continue_load_timeout"
-                : "continue_load_failed");
-
-            _waitingRewardedResult = false;
-            _queuedRewardedAdShow = false;
-            _rewardEarned = false;
-
-            if (_rewardedLoadTimeoutRoutine != null)
-            {
-                StopCoroutine(_rewardedLoadTimeoutRoutine);
-                _rewardedLoadTimeoutRoutine = null;
-            }
-
-            if (continueButton != null)
-                continueButton.interactable = true;
-
-            if (noMovesLabel != null)
-                noMovesLabel.text = GetRewardedLoadFailedMessage();
-
-            if (_continueOfferActive && _continueCountdownRoutine == null)
-                _continueCountdownRoutine = StartCoroutine(ContinueCountdownRoutine());
-        }
-
-        private void HandleRewardedUserEarned()
-        {
-            if (_waitingRewardedResult)
-            {
-                _queuedRewardedAdShow = false;
-                _rewardEarned = true;
-            }
-        }
-
-        private void HandleRewardedAdClosed()
-        {
-            if (!_waitingRewardedResult)
-                return;
-
-            _waitingRewardedResult = false;
-            _queuedRewardedAdShow = false;
-
-            if (_rewardedLoadTimeoutRoutine != null)
-            {
-                StopCoroutine(_rewardedLoadTimeoutRoutine);
-                _rewardedLoadTimeoutRoutine = null;
-            }
-
-            if (_rewardEarned)
-            {
-                CompleteContinue();
-                return;
-            }
-
-            if (CanLog)
-                Debug.LogWarning("[GameOverView] Rewarded ad closed without reward callback. Continue denied.");
-
-            EmitContinueTelemetry("continue_denied");
-            BeginFinalGameOver(_pendingFinalScore);
-        }
-
-        private void CompleteContinue()
-        {
-            _continueOfferActive = false;
-            _queuedRewardedAdShow = false;
-            _continueCountdownRemaining = 0f;
-
-            if (_continueCountdownRoutine != null)
-            {
-                StopCoroutine(_continueCountdownRoutine);
-                _continueCountdownRoutine = null;
-            }
-
-            if (_rewardedLoadTimeoutRoutine != null)
-            {
-                StopCoroutine(_rewardedLoadTimeoutRoutine);
-                _rewardedLoadTimeoutRoutine = null;
-            }
-
-            SetContinueOfferVisible(false);
-
-            bool continued = _gameBootstrap != null && _gameBootstrap.TryContinueAfterRewardedAd();
-            if (!continued)
-            {
-                EmitContinueTelemetry("continue_restore_failed");
-                BeginFinalGameOver(_pendingFinalScore);
-                return;
-            }
-
-            _continuesUsedThisRun++;
-            EmitContinueTelemetry("continue_success");
-
-            if (CanLog)
-                Debug.Log("[GameOverView] Continue flow completed successfully.");
-
-            GameOverScenePayload.Clear();
-            HideGameOverScreenImmediate();
         }
 
         private void BeginFinalGameOver(int finalScore)
         {
-            if (_isFinishingGameOver || _waitingRewardedResult)
+            if (_isFinishingGameOver || (_continueController != null && _continueController.IsWaitingRewardedResult))
                 return;
 
             _pendingFinalScore = finalScore;
             _isFinishingGameOver = true;
             PrepareHiddenCoroutineHost();
-            StartCoroutine(FinalizeGameOverRoutine());
+            StartCoroutine(FinalizeGameOverRoutine(showInterstitial: true));
         }
 
-        private IEnumerator FinalizeGameOverRoutine()
+        private void HandleMainMenuButtonClicked()
         {
-            _continueOfferActive = false;
-            _waitingRewardedResult = false;
-            _queuedRewardedAdShow = false;
+            if (_isFinishingGameOver)
+                return;
 
-            if (_continueCountdownRoutine != null)
-            {
-                StopCoroutine(_continueCountdownRoutine);
-                _continueCountdownRoutine = null;
-            }
+            if (CanLog)
+                Debug.Log("[GameOverView] MainMenuButton CLICK received");
 
-            SetContinueOfferVisible(false);
+            _isFinishingGameOver = true;
+            PrepareHiddenCoroutineHost();
+            StartCoroutine(FinalizeGameOverRoutine(showInterstitial: false));
+        }
+
+        private IEnumerator FinalizeGameOverRoutine(bool showInterstitial)
+        {
+            _continueController?.Reset();
+            _continueController?.Cleanup();
 
             if (playBoardExplosionOnFinalGameOver)
-                yield return PlayBoardExplosionRoutine();
-            GameOverScenePayload.Clear();
-
-            if (Application.CanStreamedLevelBeLoaded(mainMenuSceneName))
             {
-                HideGameOverScreenImmediate();
-                SceneManager.LoadScene(mainMenuSceneName);
-                yield break;
+                // The continue panel may still be open when the offer expires.
+                // Fade the complete game-over overlay out while the board plays
+                // its destruction sequence, then transition away below.
+                if (_canvasGroup != null)
+                {
+                    _canvasGroup.alpha = 0f;
+                    _canvasGroup.interactable = false;
+                    _canvasGroup.blocksRaycasts = false;
+                }
+
+                yield return PlayBoardExplosionRoutine();
             }
 
-            Debug.LogError($"[GameOverView] MainMenu load FAILED after continue timeout: Scene '{mainMenuSceneName}' yüklenemiyor. Build Settings'e ekli mi?");
-            ShowGameOverScreen(_pendingFinalScore);
-            _isFinishingGameOver = false;
+            if (showInterstitial && TryShowInterstitialViaReflection())
+            {
+                // Give the SDK a frame to dispatch the fullscreen-open event
+                // before unloading the game-over scene.
+                yield return null;
+                yield return new WaitForSecondsRealtime(0.15f);
+            }
+
+            // Once the destruction sequence (and any interstitial hand-off) is
+            // complete, leave the game-over scene and return to the main menu.
+            ReturnToMainMenu();
+            yield break;
+        }
+
+        private static bool TryShowInterstitialViaReflection()
+        {
+            const string managerTypeName = "AdMobManager";
+            Type managerType = null;
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                managerType = assembly.GetType(managerTypeName);
+                if (managerType != null)
+                    break;
+            }
+
+            var instanceProperty = managerType?.GetProperty("ExistingInstance", BindingFlags.Public | BindingFlags.Static);
+            object manager = instanceProperty?.GetValue(null);
+            var showMethod = managerType?.GetMethod("TryShowInterstitialOnGameOver", BindingFlags.Public | BindingFlags.Instance);
+            if (manager == null || showMethod == null)
+                return false;
+
+            try
+            {
+                return showMethod.Invoke(manager, null) is bool shown && shown;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[GameOverView] Interstitial show call failed: {ex.Message}");
+                return false;
+            }
         }
 
         private IEnumerator PlayBoardExplosionRoutine()
         {
             if (_gridView == null)
-                ResolveContinueDependencies();
+                ResolveGridViewDependency();
 
             var state = _gameBootstrap != null ? _gameBootstrap.CurrentState : null;
             var board = state?.Board;
@@ -1501,7 +1096,7 @@ namespace BlockPuzzle.UnityAdapter.UI
                 _canvasGroup.blocksRaycasts = false;
             }
 
-            SetContinueOfferVisible(false);
+            _continueController?.Reset();
         }
 
         private void PlayBoardCellBreakAnimation(int x, int y, Color blockColor)
@@ -1521,6 +1116,10 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (breakVisual == null)
                 return;
 
+            // Capture the actual filled-cell sprite first, then clear only the
+            // source cell. The temporary visual carries the real block through
+            // the break animation instead of showing an empty placeholder.
+            _gridView.ForceCellEmptyVisual(x, y);
 
             if (AnimationController.Instance != null)
             {
@@ -1595,93 +1194,7 @@ namespace BlockPuzzle.UnityAdapter.UI
                 gameSceneName: sourceGameSceneName));
         }
 
-        private void SetContinueOfferVisible(bool visible)
-        {
-            if (CanLog)
-                Debug.Log($"[GameOverView] SetContinueOfferVisible({visible})");
-            if (continueOfferPanel == null)
-            {
-                Debug.LogError("[GameOverView] continueOfferPanel NULL!");
-                return;
-            }
 
-            continueOfferPanel.SetActive(visible);
-
-            if (!visible)
-            {
-                if (CanLog)
-                    Debug.Log("[GameOverView] Offer gizleniyor");
-                return;
-            }
-
-            if (CanLog)
-                Debug.Log("[GameOverView] Offer gosteriliyor - backdrop refresh basliyor");
-            if (_gridView == null)
-                ResolveContinueDependencies();
-
-            if (_gridView != null)
-            {
-                if (CanLog)
-                    Debug.Log("[GameOverView] GridView bulundu, backdrop refresh cagriliyor");
-                _gridView.EnsureBoardBackdropVisible();
-            }
-            else
-            {
-                Debug.LogError("[GameOverView] GridView NULL!");
-            }
-        }
-
-        private void SetContinueOfferAdUiVisible(bool visible)
-        {
-            if (continueButton != null && continueButton != restartButton)
-            {
-                continueButton.gameObject.SetActive(visible);
-                continueButton.interactable = visible;
-            }
-
-            if (continueOfferPanel == null)
-                return;
-
-            Transform offerHintPill = FindDeep(continueOfferPanel.transform, "OfferHintPill");
-            if (offerHintPill != null)
-                offerHintPill.gameObject.SetActive(visible);
-        }
-
-        private static void EmitContinueTelemetry(string eventName)
-        {
-            try
-            {
-                var telemetryType = Type.GetType("AdTelemetry");
-                var dispatchMethod = telemetryType?.GetMethod(
-                    "DispatchLifecycleEvent",
-                    BindingFlags.Public | BindingFlags.Static);
-                dispatchMethod?.Invoke(null, new object[] { "rewarded", "continue_rewarded", eventName, string.Empty, 0d });
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[GameOverView] Continue telemetry dispatch failed: {ex.Message}");
-            }
-        }
-
-        private bool HasContinueQuotaRemaining()
-        {
-            return _continuesUsedThisRun < GetContinueOfferLimit();
-        }
-
-        private int GetContinueOfferLimit()
-        {
-            return Mathf.Max(0, maxContinueOffersPerRun);
-        }
-
-        private void NormalizeContinueOfferSettings()
-        {
-            // Legacy flag kept for backward-compatible inspector data.
-            if (allowOneContinuePerRun)
-                maxContinueOffersPerRun = Math.Min(1, Math.Max(0, maxContinueOffersPerRun));
-
-            if (CanLog)
-                Debug.Log($"[GameOverView] Continue offer limit securely normalized and locked to 1 per run.");
-        }
 
         // -------------------------------------------------------
         // Actions
@@ -2186,46 +1699,9 @@ namespace BlockPuzzle.UnityAdapter.UI
             return IsEnglishSelected() ? english : turkish;
         }
 
-        private string GetNoMovesMessage()
-        {
-            return TrEn(noMovesMessage, string.IsNullOrWhiteSpace(noMovesMessageEnglish) ? "No moves left!" : noMovesMessageEnglish);
-        }
-
-        private string GetRewardedLoadingMessage()
-        {
-            return TrEn(rewardedLoadingMessage, string.IsNullOrWhiteSpace(rewardedLoadingMessageEnglish) ? "Loading ad..." : rewardedLoadingMessageEnglish);
-        }
-
-        private string GetRewardedOpeningMessage()
-        {
-            return TrEn(rewardedOpeningMessage, string.IsNullOrWhiteSpace(rewardedOpeningMessageEnglish) ? "Opening ad..." : rewardedOpeningMessageEnglish);
-        }
-
-        private string GetRewardedLoadFailedMessage()
-        {
-            return TrEn(rewardedLoadFailedMessage, string.IsNullOrWhiteSpace(rewardedLoadFailedMessageEnglish) ? "Ad is currently unavailable." : rewardedLoadFailedMessageEnglish);
-        }
-
         private static string GetNewBestLabel()
         {
             return TrEn("YENİ REKOR!", "NEW BEST!");
-        }
-
-        private bool IsStyledInGameContinueOfferActive()
-        {
-            return !IsDedicatedGameOverScene() &&
-                   continueOfferPanel != null &&
-                   FindDeep(continueOfferPanel.transform, "InGameContinueOfferRoot") != null;
-        }
-
-        private string GetContinueOfferSubtitle()
-        {
-            return TrEn("Reklam izlemek için 5 saniyen var", "You have 5 seconds to watch the ad");
-        }
-
-        private string GetContinueOfferUnavailableMessage()
-        {
-            return TrEn("Reklam izleme hakkınız kalmadı", "You have no ad watches left");
         }
 
         private static string FormatFinalScore(int finalScore)
@@ -2236,11 +1712,6 @@ namespace BlockPuzzle.UnityAdapter.UI
         private static string FormatBestScore(int bestScore)
         {
             return $"{TrEn("En iyi skor", "Best score")}: {bestScore:N0}";
-        }
-
-        private static string FormatContinueCountdown(int seconds)
-        {
-            return TrEn($"Devam için: {seconds} sn", $"Continue in: {seconds}s");
         }
 
         private static string BuildSessionSummary(int bestMoveDelta, int highestCombo, int linesCleared, float averagePerMove, string riskSnapshotCode)
@@ -2313,26 +1784,18 @@ namespace BlockPuzzle.UnityAdapter.UI
             }
         }
 
-        private void ApplyGuidanceHint(string guidanceCode)
+        private void ApplyGuidanceHint(string guidanceCode, int finalScore = -1, int bestScore = -1)
         {
-            if (nextTryTitleText == null || guidanceHintText == null)
-                return;
-
-            string guidance = BuildGuidanceMessage(guidanceCode);
-            bool hasGuidance = !string.IsNullOrWhiteSpace(guidance);
-
-            nextTryTitleText.gameObject.SetActive(hasGuidance);
-            guidanceHintText.gameObject.SetActive(hasGuidance);
-            if (!hasGuidance)
-                return;
-
-            nextTryTitleText.text = TrEn("Bir Sonraki Denemede", "Next Try");
-            guidanceHintText.text = guidance;
-
-            if (!string.Equals(_lastTrackedGuidanceCode, guidanceCode, StringComparison.Ordinal))
+            if (nextTryTitleText != null)
             {
-                AppAnalytics.TrackGameOverGuidanceShown(guidanceCode);
-                _lastTrackedGuidanceCode = guidanceCode ?? string.Empty;
+                nextTryTitleText.text = string.Empty;
+                nextTryTitleText.gameObject.SetActive(false);
+            }
+
+            if (guidanceHintText != null)
+            {
+                guidanceHintText.text = string.Empty;
+                guidanceHintText.gameObject.SetActive(false);
             }
         }
 

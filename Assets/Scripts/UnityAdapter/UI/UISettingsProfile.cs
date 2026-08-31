@@ -13,6 +13,7 @@ public static class UISettingsProfile
     public const int ThemeClassic = 0;
     public const int ThemeNight = 1;
     public const int ThemeVivid = 2;
+    public const int ThemeWood = 3;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void InitializeOnLoad()
@@ -22,7 +23,7 @@ public static class UISettingsProfile
 
     public static int GetThemeId()
     {
-        return Mathf.Clamp(PlayerPrefs.GetInt(ThemeKey, ThemeClassic), ThemeClassic, ThemeVivid);
+        return Mathf.Clamp(PlayerPrefs.GetInt(ThemeKey, ThemeClassic), ThemeClassic, ThemeWood);
     }
 
     public static bool IsReduceMotionEnabled()
@@ -42,19 +43,19 @@ public static class UISettingsProfile
 
     public static void SetThemeId(int themeId)
     {
-        PlayerPrefs.SetInt(ThemeKey, Mathf.Clamp(themeId, ThemeClassic, ThemeVivid));
+        PlayerPrefs.SetInt(ThemeKey, Mathf.Clamp(themeId, ThemeClassic, ThemeWood));
         PlayerPrefs.Save();
         ApplyProjectColorGradingPreferences();
     }
 
     public static int GetLastAutomaticThemeId()
     {
-        return Mathf.Clamp(PlayerPrefs.GetInt(LastAutomaticThemeKey, -1), -1, ThemeVivid);
+        return Mathf.Clamp(PlayerPrefs.GetInt(LastAutomaticThemeKey, -1), -1, ThemeWood);
     }
 
     public static void SetLastAutomaticThemeId(int themeId)
     {
-        PlayerPrefs.SetInt(LastAutomaticThemeKey, Mathf.Clamp(themeId, -1, ThemeVivid));
+        PlayerPrefs.SetInt(LastAutomaticThemeKey, Mathf.Clamp(themeId, -1, ThemeWood));
         PlayerPrefs.Save();
     }
 
@@ -122,6 +123,11 @@ public static class UISettingsProfile
                 saturationMultiplier = 1.12f;
                 valueMultiplier = 1.08f;
                 contrastMultiplier = 1.08f;
+                break;
+            case ThemeWood:
+                saturationMultiplier = 1.06f;
+                valueMultiplier = 1.04f;
+                contrastMultiplier = 1.10f;
                 break;
         }
 

@@ -15,8 +15,8 @@ using BlockPuzzle.UnityAdapter.Blocks;
 using BlockPuzzle.UnityAdapter.Configuration;
 using BlockPuzzle.UnityAdapter.Analytics;
 using BlockPuzzle.UnityAdapter.Grid;
+using BlockPuzzle.UnityAdapter.Social;
 using BlockPuzzle.UnityAdapter;
-using UnityEngine.UI;
 using Debug = BlockPuzzle.Core.Common.GameLogger;
 
 namespace BlockPuzzle.UnityAdapter.Boot
@@ -62,7 +62,7 @@ namespace BlockPuzzle.UnityAdapter.Boot
         [SerializeField] private Sprite gameplayBackgroundSpriteOverride;
         [SerializeField] private Color gameplayBackgroundTint = Color.white;
         [SerializeField] private Color gameplayBackgroundDimmerColor = new Color(0.07f, 0.11f, 0.2f, 0.34f);
-        [SerializeField] private Color gameplayCameraClearColor = new Color(0.19215687f, 0.3019608f, 0.4745098f, 1f);
+        [SerializeField] private Color gameplayCameraClearColor = new Color(0.055f, 0.082f, 0.141f, 1f);
         [SerializeField] [Range(0f, 1f)] private float legacyOverlayBackgroundAlpha = 0f;
         [SerializeField] [Range(-500, 500)] private int worldBackgroundSortingOrder = -200;
         [SerializeField] [Range(-500, 500)] private int worldDimmerSortingOrder = -150;
@@ -85,10 +85,7 @@ namespace BlockPuzzle.UnityAdapter.Boot
         private StatisticsManager _statisticsManager;
         private CameraController _cameraController;
         private ScreenLayoutManager _screenLayoutManager;
-        private SpriteRenderer _worldBackgroundRenderer;
-        private SpriteRenderer _worldDimmerRenderer;
-        private Image _legacyOverlayBackground;
-        private Sprite _generatedBackdropSprite;
+        private VisualBackgroundManager _visualManager;
         private const string SaveKey = "default";
         private int _currentSeed;
         private int _rescueTokensRemaining = 1;
@@ -100,10 +97,9 @@ namespace BlockPuzzle.UnityAdapter.Boot
         private ScoreConfig _scoreConfig;
         private GameMode _currentMode = GameMode.Classic;
         private GameSettings _settingsCache;
-        private bool _isTutorialRunActive;
-        private int _tutorialStepIndex;
-        private bool _tutorialPendingThreeByThreeSet;
-        private bool _tutorialThreeByThreeSetApplied;
+        private TutorialService _tutorialService;
+        private AnalyticsTelemetryService _analyticsService;
+        private AnalyticsSessionContext _analyticsContext;
         private string _lastGameOverGuidanceCode = string.Empty;
         private bool _onboardingSpawnProfileLogged;
         private string _lastGameOverRiskSnapshotCode = string.Empty;
@@ -112,18 +108,6 @@ namespace BlockPuzzle.UnityAdapter.Boot
         private float _scheduledSaveTime = -1f;
         private bool _gameSaveInFlight;
         private bool _saveRequestedDuringFlight;
-        private static readonly ShapeId[] TutorialOpeningSet =
-        {
-            ShapeLibrary.Single,
-            new ShapeId(3),
-            new ShapeId(8)
-        };
-        private static readonly ShapeId[] TutorialThreeByThreeSet =
-        {
-            new ShapeId(9),
-            ShapeLibrary.Single,
-            new ShapeId(5)
-        };
 
         public static event Action<BoardState, Int2[], int> OnBoardChanged;
         public static event Action<int, int, bool> OnScoreChanged;
@@ -165,7 +149,6 @@ namespace BlockPuzzle.UnityAdapter.Boot
 
         private void Awake()
         {
-            CleanupBackdropDuplicates();
             var dataProvider = new UnityPlayerPrefsDataProvider();
             _gameStatePersistence = dataProvider;
             _statisticsPersistence = dataProvider;
@@ -177,6 +160,21 @@ namespace BlockPuzzle.UnityAdapter.Boot
             _screenLayoutManager = new ScreenLayoutManager();
             _gameSaveManager = new GameSaveManager(_gameStatePersistence, SaveKey);
             _statisticsManager = new StatisticsManager(_statisticsPersistence);
+            _tutorialService = new TutorialService(_settingsPersistence, IsTutorialEnabled, () => CanLog);
+            _analyticsService = new AnalyticsTelemetryService();
+            _visualManager = new VisualBackgroundManager(
+                transform,
+                useWorldBackgroundLayer,
+                preserveAuthoredWorldBackground,
+                gameplayBackgroundSpriteOverride,
+                gameplayBackgroundTint,
+                gameplayBackgroundDimmerColor,
+                gameplayCameraClearColor,
+                legacyOverlayBackgroundAlpha,
+                worldBackgroundSortingOrder,
+                worldDimmerSortingOrder,
+                legacyOverlayBackgroundName);
+            _visualManager.CleanupDuplicates();
             if (CanLog)
                 Debug.Log($"[GameBootstrap] Initialized with BestScoreStore (PlayerPrefs), ScoreFormulaVersion={_scoreConfig.FormulaVersion}");
         }
@@ -196,8 +194,11 @@ namespace BlockPuzzle.UnityAdapter.Boot
                 if (CanLog) Debug.LogWarning("[GameBootstrap] NewDragSystem not found! Make sure it's in the scene.");
             }
 
+            _tutorialService.StepChanged += OnTutorialStepChangedFromService;
+            _analyticsService.AnalyticsEvent += OnAnalyticsEventFromService;
             StartFromLaunchMode();
             ApplyResponsiveLayout(true);
+            SubscribeToRemoteScoreChanges();
         }
 
         private void Update()
@@ -249,7 +250,7 @@ namespace BlockPuzzle.UnityAdapter.Boot
                 return;
             }
 
-            NormalizeGameplayCamera(camera);
+            _visualManager?.NormalizeGameplayCamera(camera);
             ApplyResponsiveLayout(true);
 
             float aspectRatio = (float)Screen.width / Mathf.Max(1, Screen.height);
@@ -263,6 +264,7 @@ namespace BlockPuzzle.UnityAdapter.Boot
             bool loaded = false;
             _currentMode = IsModesEnabled ? GameLaunchState.SelectedMode : GameMode.Classic;
             _settingsCache = await LoadSettingsAsync();
+            _tutorialService.SetSettingsCache(_settingsCache);
 
             if (GameLaunchState.LaunchMode != GameLaunchMode.NewGame)
             {
@@ -271,12 +273,12 @@ namespace BlockPuzzle.UnityAdapter.Boot
 
             if (!loaded)
             {
-                _isTutorialRunActive = ShouldActivateTutorialForNewRun();
+                _tutorialService.MarkForActivation(_currentMode);
                 StartNewGame(GameLaunchState.LaunchMode == GameLaunchMode.NewGame);
             }
             else
             {
-                ResetTutorialRuntimeState(notify: true);
+                _tutorialService.ResetRuntimeState(notify: true);
             }
 
             GameLaunchState.Reset();
@@ -310,6 +312,7 @@ namespace BlockPuzzle.UnityAdapter.Boot
                 _rescueTokensRemaining = 1;
                 _sessionDailyMissionCompletions = 0;
                 _sessionWeeklyMissionCompletions = 0;
+                RebuildAnalyticsContext();
 
                 if (CanLog)
                     Debug.Log($"[GameBootstrap] Created game engine {modeBoardSize.width}x{modeBoardSize.height}, mode={_currentMode}, seed: {actualSeed}");
@@ -317,10 +320,10 @@ namespace BlockPuzzle.UnityAdapter.Boot
                 _gameEngine.StartNewGame(actualSeed);
                 ApplyModeTuning();
                 _currentGameState = _gameEngine.CurrentState;
-                if (_isTutorialRunActive)
-                    ActivateTutorialRun();
-                else
-                    ResetTutorialRuntimeState(notify: false);
+                _tutorialService.SetEngine(_gameEngine);
+                _tutorialService.ActivateIfPending();
+                if (!_tutorialService.IsActive)
+                    _tutorialService.ResetRuntimeState(notify: false);
                 _sessionHighestCombo = Math.Max(0, _currentGameState.Combo);
                 var scoreTransaction = ApplyBestScoreTransaction(_currentGameState.Score);
 
@@ -369,13 +372,21 @@ namespace BlockPuzzle.UnityAdapter.Boot
                     return false;
 
                 _currentGameState = _gameEngine.CurrentState;
-                UpdateTutorialProgress(moveResult, placedShapeId);
+                _tutorialService.UpdateProgress(moveResult, placedShapeId);
                 ApplyModeTuning();
                 RecordMoveRiskSnapshot(moveResult);
                 _sessionHighestCombo = Math.Max(_sessionHighestCombo, _currentGameState.Combo);
                 var scoreTransaction = ApplyBestScoreTransaction(_currentGameState.Score);
                 _statisticsManager?.RecordMove(moveResult.ScoreDelta, moveResult.LinesCleared);
-                EmitGameplayTelemetry(moveResult, scoreTransaction, comboBeforeMove, _currentGameState.Combo);
+                _analyticsService.EmitGameplayTelemetry(
+                    moveResult,
+                    comboBeforeMove,
+                    _currentGameState.Combo,
+                    _currentGameState.Score,
+                    scoreTransaction.BestScoreAfter,
+                    scoreTransaction.IsNewBest,
+                    _currentGameState.MoveCount,
+                    _analyticsContext);
 
                 NotifyBoardChanged(moveResult);
                 NotifyScoreBreakdown(moveResult, scoreTransaction.IsNewBest);
@@ -511,7 +522,14 @@ namespace BlockPuzzle.UnityAdapter.Boot
             return true;
         }
 
-        public int RescueTokensRemaining => _rescueTokensRemaining;
+        public int RescueTokensRemaining => _gameEngine != null && _gameEngine.CurrentState != null
+            ? Math.Max(0, 3 - _gameEngine.CurrentState.RescueCount)
+            : 0;
+
+        public void SkipActiveTutorial()
+        {
+            _tutorialService?.SkipActiveTutorial();
+        }
 
         public void RecordMissionProgress(int progressDelta, bool dailyCompleted, bool weeklyCompleted)
         {
@@ -523,27 +541,29 @@ namespace BlockPuzzle.UnityAdapter.Boot
                 _sessionDailyMissionCompletions++;
             if (weeklyCompleted)
                 _sessionWeeklyMissionCompletions++;
+            if (dailyCompleted || weeklyCompleted)
+                RebuildAnalyticsContext();
 
             if (dailyCompleted || weeklyCompleted)
             {
                 var state = _gameEngine?.CurrentState;
-                EmitAnalyticsEvent(
-                    AnalyticsEventName.MissionCompleted,
+                _analyticsService.EmitMissionCompletedEvent(
                     state?.MoveCount ?? 0,
                     _gameEngine?.Score ?? 0,
-                    scoreDelta: 0,
-                    linesCleared: state?.TotalLinesCleared ?? 0,
-                    comboBefore: state?.Combo ?? 0,
-                    comboAfter: state?.Combo ?? 0,
-                    bestScore: BestScore,
-                    isNewBest: false,
-                    isScoreAnomaly: false,
-                    scoreAnomalyCode: string.Empty);
+                    state?.TotalLinesCleared ?? 0,
+                    state?.Combo ?? 0,
+                    BestScore,
+                    _analyticsContext);
             }
         }
 
         private void OnDestroy()
         {
+            if (_tutorialService != null)
+                _tutorialService.StepChanged -= OnTutorialStepChangedFromService;
+            if (_analyticsService != null)
+                _analyticsService.AnalyticsEvent -= OnAnalyticsEventFromService;
+            UnsubscribeFromRemoteScoreChanges();
             FlushPendingGameSave();
             _statisticsManager?.FlushPendingStatistics();
         }
@@ -673,7 +693,7 @@ namespace BlockPuzzle.UnityAdapter.Boot
         private void NotifyGameStarted()
         {
             OnGameStarted?.Invoke();
-            EmitTutorialStepState();
+            _tutorialService.RefreshStepState();
         }
 
         private void NotifyBoardChanged(MoveResult moveResult = null)
@@ -714,166 +734,43 @@ namespace BlockPuzzle.UnityAdapter.Boot
                 OnBestScoreChanged?.Invoke(bestScore);
         }
 
-        private void EmitGameplayTelemetry(MoveResult moveResult, ScoreTransactionResult scoreTransaction, int comboBeforeMove, int comboAfterMove)
+        // ────────────────────────────────────────────────────────────────
+        // Remote Firestore score sync
+        // ────────────────────────────────────────────────────────────────
+
+        private void SubscribeToRemoteScoreChanges()
         {
-            if (moveResult == null || !moveResult.Success)
+            if (FirebaseManager.Instance != null)
+                FirebaseManager.Instance.OnRemoteScoreChanged += HandleRemoteScoreChanged;
+        }
+
+        private void UnsubscribeFromRemoteScoreChanges()
+        {
+            if (FirebaseManager.Instance != null)
+                FirebaseManager.Instance.OnRemoteScoreChanged -= HandleRemoteScoreChanged;
+        }
+
+        private void HandleRemoteScoreChanged(int remoteScore)
+        {
+            if (_bestScoreStore == null)
                 return;
 
+            int localBest = _bestScoreStore.GetBestScore();
+
+            // Always accept remote score (allows admin override in either direction)
+            if (remoteScore == localBest)
+                return;
+
+            _bestScoreStore.ForceSetBestScore(remoteScore);
+
             int currentScore = _gameEngine?.Score ?? 0;
-            int bestScore = scoreTransaction.BestScoreAfter;
-            int sessionMoveCount = _currentGameState?.MoveCount ?? 0;
-            bool isScoreAnomaly = TryGetScoreAnomalyCode(
-                scoreDelta: moveResult.ScoreDelta,
-                linesCleared: moveResult.LinesCleared,
-                totalScore: currentScore,
-                comboBefore: comboBeforeMove,
-                comboAfter: comboAfterMove,
-                anomalyCode: out string anomalyCode);
+            bool isNewBest = remoteScore > localBest;
 
-            EmitAnalyticsEvent(
-                AnalyticsEventName.MoveScored,
-                sessionMoveCount,
-                currentScore,
-                moveResult.ScoreDelta,
-                moveResult.LinesCleared,
-                comboBeforeMove,
-                comboAfterMove,
-                bestScore,
-                scoreTransaction.IsNewBest,
-                isScoreAnomaly,
-                anomalyCode);
+            if (CanLog)
+                Debug.Log($"[GameBootstrap] Remote score applied: {localBest} → {remoteScore}");
 
-            if (moveResult.LinesCleared > 0)
-            {
-                EmitAnalyticsEvent(
-                    AnalyticsEventName.LineCleared,
-                    sessionMoveCount,
-                    currentScore,
-                    moveResult.ScoreDelta,
-                    moveResult.LinesCleared,
-                    comboBeforeMove,
-                    comboAfterMove,
-                    bestScore,
-                    scoreTransaction.IsNewBest,
-                    isScoreAnomaly,
-                    anomalyCode);
-            }
-
-            if (comboBeforeMove != comboAfterMove)
-            {
-                EmitAnalyticsEvent(
-                    AnalyticsEventName.ComboChanged,
-                    sessionMoveCount,
-                    currentScore,
-                    moveResult.ScoreDelta,
-                    moveResult.LinesCleared,
-                    comboBeforeMove,
-                    comboAfterMove,
-                    bestScore,
-                    scoreTransaction.IsNewBest,
-                    isScoreAnomaly,
-                    anomalyCode);
-            }
-
-            if (scoreTransaction.IsNewBest)
-            {
-                EmitAnalyticsEvent(
-                    AnalyticsEventName.BestScoreUpdated,
-                    sessionMoveCount,
-                    currentScore,
-                    moveResult.ScoreDelta,
-                    moveResult.LinesCleared,
-                    comboBeforeMove,
-                    comboAfterMove,
-                    bestScore,
-                    isNewBest: true,
-                    isScoreAnomaly: isScoreAnomaly,
-                    scoreAnomalyCode: anomalyCode);
-            }
-        }
-
-        private void EmitAnalyticsEvent(
-            string eventName,
-            int sessionMoveCount,
-            int totalScore,
-            int scoreDelta,
-            int linesCleared,
-            int comboBefore,
-            int comboAfter,
-            int bestScore,
-            bool isNewBest,
-            bool isScoreAnomaly,
-            string scoreAnomalyCode)
-        {
-            var payload = new AnalyticsEventData(
-                eventName: eventName,
-                schemaVersion: AnalyticsSchemaVersion,
-                scoreFormulaVersion: ScoreFormulaVersion,
-                sessionMoveCount: sessionMoveCount,
-                totalScore: totalScore,
-                scoreDelta: scoreDelta,
-                linesCleared: linesCleared,
-                comboBefore: comboBefore,
-                comboAfter: comboAfter,
-                bestScore: bestScore,
-                isNewBest: isNewBest,
-                isScoreAnomaly: isScoreAnomaly,
-                scoreAnomalyCode: scoreAnomalyCode,
-                timestampUnixMs: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                gameMode: _currentMode.ToString(),
-                dailyMissionCompletions: IsExtendedTelemetryEnabled ? _sessionDailyMissionCompletions : -1,
-                weeklyMissionCompletions: IsExtendedTelemetryEnabled ? _sessionWeeklyMissionCompletions : -1);
-
-            OnAnalyticsEvent?.Invoke(payload);
-        }
-
-        private static bool TryGetScoreAnomalyCode(
-            int scoreDelta,
-            int linesCleared,
-            int totalScore,
-            int comboBefore,
-            int comboAfter,
-            out string anomalyCode)
-        {
-            anomalyCode = string.Empty;
-
-            if (scoreDelta < 0)
-            {
-                anomalyCode = "NEGATIVE_SCORE_DELTA";
-                return true;
-            }
-
-            if (totalScore < 0)
-            {
-                anomalyCode = "NEGATIVE_TOTAL_SCORE";
-                return true;
-            }
-
-            if (linesCleared < 0)
-            {
-                anomalyCode = "NEGATIVE_LINES_CLEARED";
-                return true;
-            }
-
-            if (linesCleared > 0 && scoreDelta <= 0)
-            {
-                anomalyCode = "LINES_WITHOUT_SCORE";
-                return true;
-            }
-
-            if (linesCleared > 0 && comboAfter <= comboBefore)
-            {
-                anomalyCode = "COMBO_NOT_INCREASED_AFTER_CLEAR";
-                return true;
-            }
-
-            if (linesCleared == 0 && comboAfter > comboBefore)
-            {
-                anomalyCode = "COMBO_INCREASED_WITHOUT_CLEAR";
-                return true;
-            }
-
-            return false;
+            OnScoreChanged?.Invoke(currentScore, remoteScore, isNewBest);
+            OnBestScoreChanged?.Invoke(remoteScore);
         }
 
         private async Task<GameSettings> LoadSettingsAsync()
@@ -893,146 +790,32 @@ namespace BlockPuzzle.UnityAdapter.Boot
             }
         }
 
-        private bool ShouldActivateTutorialForNewRun()
+        private void OnTutorialStepChangedFromService(TutorialStepPayload payload)
         {
-            if (!IsTutorialEnabled)
-                return false;
-
-            if (_currentMode != GameMode.Classic)
-                return false;
-
-            if (GameLaunchState.ForceTutorialReplay)
-                return true;
-
-            return _settingsCache == null || !_settingsCache.TutorialCompleted;
+            OnTutorialStepChanged?.Invoke(payload);
         }
 
-        private void ActivateTutorialRun()
+        private void OnAnalyticsEventFromService(AnalyticsEventData payload)
         {
-            _isTutorialRunActive = true;
-            _tutorialStepIndex = 1;
-            _tutorialPendingThreeByThreeSet = false;
-            _tutorialThreeByThreeSetApplied = false;
-
-            AppAnalytics.TrackTutorialStarted("first_session");
-            ApplyTutorialBlockSet(TutorialOpeningSet);
+            OnAnalyticsEvent?.Invoke(payload);
         }
 
-        private void ApplyTutorialBlockSet(ShapeId[] shapeIds)
+        private void RebuildAnalyticsContext()
         {
-            if (_gameEngine == null || shapeIds == null || shapeIds.Length == 0)
-                return;
-
-            _gameEngine.OverrideActiveBlocks(shapeIds);
-            _currentGameState = _gameEngine.CurrentState;
-        }
-
-        private void UpdateTutorialProgress(MoveResult moveResult, ShapeId placedShapeId)
-        {
-            if (!_isTutorialRunActive || moveResult == null || !moveResult.Success)
-                return;
-
-            if (_tutorialStepIndex <= 1)
-            {
-                _tutorialStepIndex = 2;
-                EmitTutorialStepState();
-                return;
-            }
-
-            if (_tutorialStepIndex == 2 && moveResult.LinesCleared > 0)
-            {
-                _tutorialStepIndex = 3;
-                _tutorialPendingThreeByThreeSet = true;
-
-                if (moveResult.TriggersSpawn)
-                    ApplyPendingTutorialSpawnOverrideIfNeeded();
-
-                EmitTutorialStepState();
-                return;
-            }
-
-            if (_tutorialStepIndex == 3)
-            {
-                if (_tutorialPendingThreeByThreeSet && moveResult.TriggersSpawn)
-                    ApplyPendingTutorialSpawnOverrideIfNeeded();
-
-                if (placedShapeId.Equals(new ShapeId(9)))
-                    CompleteTutorialRun("first_session");
-            }
-        }
-
-        private void ApplyPendingTutorialSpawnOverrideIfNeeded()
-        {
-            if (!_isTutorialRunActive || !_tutorialPendingThreeByThreeSet || _tutorialThreeByThreeSetApplied)
-                return;
-
-            ApplyTutorialBlockSet(TutorialThreeByThreeSet);
-            _tutorialPendingThreeByThreeSet = false;
-            _tutorialThreeByThreeSetApplied = true;
-        }
-
-        public void SkipActiveTutorial()
-        {
-            if (!_isTutorialRunActive)
-                return;
-
-            CompleteTutorialRun("first_session_skipped");
-        }
-
-        private async void CompleteTutorialRun(string analyticsContext)
-        {
-            if (!_isTutorialRunActive)
-                return;
-
-            _isTutorialRunActive = false;
-            _tutorialPendingThreeByThreeSet = false;
-            _tutorialThreeByThreeSetApplied = false;
-
-            AppAnalytics.TrackTutorialCompleted(string.IsNullOrWhiteSpace(analyticsContext) ? "first_session" : analyticsContext);
-
-            _settingsCache ??= GameSettings.CreateDefault();
-            _settingsCache.TutorialCompleted = true;
-
-            if (_settingsPersistence != null)
-            {
-                try
-                {
-                    await _settingsPersistence.SaveSettingsAsync(_settingsCache);
-                }
-                catch (Exception ex)
-                {
-                    if (CanLog)
-                        Debug.LogWarning($"[GameBootstrap] Tutorial completion could not be persisted: {ex.Message}");
-                }
-            }
-
-            EmitTutorialStepState();
-        }
-
-        private void ResetTutorialRuntimeState(bool notify)
-        {
-            _isTutorialRunActive = false;
-            _tutorialStepIndex = 0;
-            _tutorialPendingThreeByThreeSet = false;
-            _tutorialThreeByThreeSetApplied = false;
-            _onboardingSpawnProfileLogged = false;
-
-            if (notify)
-                EmitTutorialStepState();
+            _analyticsContext = new AnalyticsSessionContext(
+                gameMode: _currentMode.ToString(),
+                dailyMissionCompletions: _sessionDailyMissionCompletions,
+                weeklyMissionCompletions: _sessionWeeklyMissionCompletions,
+                scoreFormulaVersion: ScoreFormulaVersion,
+                isExtendedTelemetryEnabled: IsExtendedTelemetryEnabled,
+                schemaVersion: AnalyticsSchemaVersion);
         }
 
         private string ResolveGameOverGuidanceCode()
         {
-            if (_isTutorialRunActive)
-            {
-                return _tutorialStepIndex switch
-                {
-                    <= 1 => "tutorial_place",
-                    2 => "tutorial_clear",
-                    3 => "tutorial_3x3",
-                    _ => "tutorial_generic"
-                };
-            }
+            var tutorialCode = _tutorialService.GetGuidanceCode();
+            if (!string.IsNullOrEmpty(tutorialCode))
+                return tutorialCode;
 
             var state = _currentGameState;
             if (state == null)
@@ -1052,91 +835,6 @@ namespace BlockPuzzle.UnityAdapter.Boot
             }
 
             return string.Empty;
-        }
-
-        private void EmitTutorialStepState()
-        {
-            if (!_isTutorialRunActive)
-            {
-                OnTutorialStepChanged?.Invoke(new TutorialStepPayload(false, 0, 3, string.Empty, string.Empty));
-                return;
-            }
-
-            string title;
-            string description;
-
-            var lang = UI.Localization.LanguageManager.Instance != null 
-                ? UI.Localization.LanguageManager.Instance.CurrentLanguage 
-                : UI.Localization.LanguageManager.Language.Turkish;
-
-            if (lang == UI.Localization.LanguageManager.Language.Korean)
-            {
-                switch (_tutorialStepIndex)
-                {
-                    case 1:
-                        title = "첫 번째 블록 배치하기";
-                        description = "블록을 드래그하여 그리드에 올려놓으세요. 첫 번째 목표는 블록 배치를 익히는 것입니다.";
-                        break;
-                    case 2:
-                        title = "가로 줄 또는 세로 줄 지우기";
-                        description = "가로 또는 세로 한 줄을 가득 채우면 자동으로 지워집니다. 블록을 채워 줄을 지워보세요.";
-                        break;
-                    case 3:
-                        title = "3x3 공간 확보하기";
-                        description = "큰 3x3 블록이 들어갈 수 있는 빈 공간을 남겨두는 것이 중요합니다. 항상 충분한 공간을 유지하세요.";
-                        break;
-                    default:
-                        title = string.Empty;
-                        description = string.Empty;
-                        break;
-                }
-            }
-            else if (lang == UI.Localization.LanguageManager.Language.English)
-            {
-                switch (_tutorialStepIndex)
-                {
-                    case 1:
-                        title = "Place the First Block";
-                        description = "Drag any block and drop it on the grid. The first goal is simply to get a feel for placing blocks.";
-                        break;
-                    case 2:
-                        title = "Clear a Row or Column";
-                        description = "A fully filled row or column is automatically cleared. Place your blocks to trigger a clear.";
-                        break;
-                    case 3:
-                        title = "Keep 3x3 Space Free";
-                        description = "Large block shapes require a 3x3 empty area. Keep enough open space to accommodate future 3x3 blocks.";
-                        break;
-                    default:
-                        title = string.Empty;
-                        description = string.Empty;
-                        break;
-                }
-            }
-            else
-            {
-                switch (_tutorialStepIndex)
-                {
-                    case 1:
-                        title = "İlk Bloğu Yerleştir";
-                        description = "Herhangi bir bloğu sürükleyip grid üzerine bırak. İlk hedef sadece yerleştirme mantığını hissetmek.";
-                        break;
-                    case 2:
-                        title = "Bir Satır Veya Sütun Temizle";
-                        description = "Tam dolu bir satır ya da sütun otomatik temizlenir. Bloklarını bu temizlemeyi kuracak şekilde kullan.";
-                        break;
-                    case 3:
-                        title = "3x3 Alan Açık Tut";
-                        description = "Büyük kare bloklar için 3x3 boşluk lazım. Sıradaki 3x3 bloğu yerleştirebileceğin kadar alan koru.";
-                        break;
-                    default:
-                        title = string.Empty;
-                        description = string.Empty;
-                        break;
-                }
-            }
-
-            OnTutorialStepChanged?.Invoke(new TutorialStepPayload(true, _tutorialStepIndex, 3, title, description));
         }
 
         private void NotifyBlocksChanged()
@@ -1181,7 +879,7 @@ namespace BlockPuzzle.UnityAdapter.Boot
             _lastGameOverRiskSnapshotCode = BuildGameOverRiskSnapshotCode();
             ClearSavedGame();
             RecordStatisticsOnGameOver(finalScore);
-            ResetTutorialRuntimeState(notify: true);
+            _tutorialService.ResetRuntimeState(notify: true);
             OnGameOver?.Invoke(finalScore);
 
             if (CanLog)
@@ -1297,7 +995,14 @@ namespace BlockPuzzle.UnityAdapter.Boot
                 _currentGameState,
                 forceTrayRefresh);
 
-            EnsureGameplayVisualReadability(Camera.main);
+            _visualManager?.ApplyVisualReadability(Camera.main);
+        }
+
+        public void RefreshThemeBackground(Sprite background, Color tint, Color dimmer, Color clearColor)
+        {
+            _visualManager?.SetThemeBackground(background, tint, dimmer, clearColor);
+            _visualManager?.NormalizeGameplayCamera(Camera.main);
+            _visualManager?.ApplyVisualReadability(Camera.main);
         }
 
         private void OnValidate()
@@ -1315,45 +1020,8 @@ namespace BlockPuzzle.UnityAdapter.Boot
             canvasReferenceResolution.y = Mathf.Max(320f, canvasReferenceResolution.y);
             canvasMatchWidthOrHeight = Mathf.Clamp01(canvasMatchWidthOrHeight);
             legacyOverlayBackgroundAlpha = Mathf.Clamp01(legacyOverlayBackgroundAlpha);
-            CleanupBackdropDuplicates();
-        }
-
-        private void CleanupBackdropDuplicates()
-        {
-            _worldBackgroundRenderer = CleanupBackdropDuplicatesForName("SceneBackground", _worldBackgroundRenderer);
-            _worldDimmerRenderer = CleanupBackdropDuplicatesForName("SceneBackgroundDimmer", _worldDimmerRenderer);
-        }
-
-        private SpriteRenderer CleanupBackdropDuplicatesForName(string objectName, SpriteRenderer preferred)
-        {
-            SpriteRenderer keptRenderer = preferred;
-
-            for (int i = transform.childCount - 1; i >= 0; i--)
-            {
-                Transform child = transform.GetChild(i);
-                if (child == null || child.name != objectName)
-                    continue;
-
-                var childRenderer = child.GetComponent<SpriteRenderer>();
-                if (childRenderer == null)
-                    continue;
-
-                if (keptRenderer == null)
-                {
-                    keptRenderer = childRenderer;
-                    continue;
-                }
-
-                if (childRenderer == keptRenderer)
-                    continue;
-
-                if (Application.isPlaying)
-                    Destroy(child.gameObject);
-                else
-                    DestroyImmediate(child.gameObject);
-            }
-
-            return keptRenderer;
+            if (_visualManager != null)
+                _visualManager.CleanupDuplicates();
         }
 
         private (int width, int height) ResolveBoardSizeForMode(GameMode mode)
@@ -1418,14 +1086,14 @@ namespace BlockPuzzle.UnityAdapter.Boot
 
             bool tutorialCompleted = _settingsCache != null && _settingsCache.TutorialCompleted;
             int moveCount = _currentGameState?.MoveCount ?? 0;
-            bool shouldEaseFirstSession = _isTutorialRunActive || (!tutorialCompleted && moveCount < 12);
+            bool shouldEaseFirstSession = _tutorialService.IsActive || (!tutorialCompleted && moveCount < 12);
 
             if (!shouldEaseFirstSession)
                 return;
 
             if (!_onboardingSpawnProfileLogged)
             {
-                AppAnalytics.TrackOnboardingSpawnProfileApplied(moveCount, _isTutorialRunActive);
+                AppAnalytics.TrackOnboardingSpawnProfileApplied(moveCount, _tutorialService.IsActive);
                 _onboardingSpawnProfileLogged = true;
             }
 
@@ -1472,203 +1140,6 @@ namespace BlockPuzzle.UnityAdapter.Boot
 
             var only = snapshots[0];
             return $"m{only.MoveNumber}:{only.AvailableThreeByThreeCount}x3/{only.LargestEmptyRectangleArea}rect/{only.FutureOpenAreaScore:F2}";
-        }
-
-        private void NormalizeGameplayCamera(Camera camera)
-        {
-            if (camera == null)
-                return;
-
-            camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = gameplayCameraClearColor;
-            camera.nearClipPlane = 0.3f;
-        }
-
-        private void EnsureGameplayVisualReadability(Camera camera)
-        {
-            if (!useWorldBackgroundLayer || camera == null)
-                return;
-
-            Image overlayBackground = ResolveLegacyOverlayBackground();
-            Sprite existingBackgroundSprite = _worldBackgroundRenderer != null ? _worldBackgroundRenderer.sprite : null;
-            bool hasThemeBackgroundOverride = gameplayBackgroundSpriteOverride != null;
-            bool keepAuthoredBackground = preserveAuthoredWorldBackground && !hasThemeBackgroundOverride && existingBackgroundSprite != null;
-            Sprite backgroundSprite = hasThemeBackgroundOverride
-                ? gameplayBackgroundSpriteOverride
-                : keepAuthoredBackground
-                    ? existingBackgroundSprite
-                    : overlayBackground != null
-                        ? overlayBackground.sprite
-                        : null;
-
-            if (overlayBackground != null)
-            {
-                Color overlayColor = overlayBackground.color;
-                if (!Mathf.Approximately(overlayColor.a, legacyOverlayBackgroundAlpha))
-                    overlayColor.a = legacyOverlayBackgroundAlpha;
-
-                overlayBackground.color = overlayColor;
-                overlayBackground.raycastTarget = false;
-            }
-
-            if (backgroundSprite == null)
-                return;
-
-            SpriteRenderer backgroundRenderer = GetOrCreateBackdropRenderer(
-                ref _worldBackgroundRenderer,
-                "SceneBackground",
-                backgroundSprite,
-                worldBackgroundSortingOrder);
-            if (!keepAuthoredBackground)
-                backgroundRenderer.color = gameplayBackgroundTint;
-            backgroundRenderer.transform.position = new Vector3(camera.transform.position.x, camera.transform.position.y, 10f);
-            ScaleRendererToCamera(backgroundRenderer, camera, preserveAspectCover: true);
-
-            bool hasAuthoredDimmer = preserveAuthoredWorldBackground && _worldDimmerRenderer != null;
-            SpriteRenderer dimmerRenderer = GetOrCreateBackdropRenderer(
-                ref _worldDimmerRenderer,
-                "SceneBackgroundDimmer",
-                GetGeneratedBackdropSprite(),
-                worldDimmerSortingOrder);
-            if (!hasAuthoredDimmer)
-                dimmerRenderer.color = gameplayBackgroundDimmerColor;
-            dimmerRenderer.transform.position = new Vector3(camera.transform.position.x, camera.transform.position.y, 9.5f);
-            ScaleRendererToCamera(dimmerRenderer, camera, preserveAspectCover: false);
-        }
-
-        private Image ResolveLegacyOverlayBackground()
-        {
-            if (_legacyOverlayBackground != null)
-                return _legacyOverlayBackground;
-
-            Canvas canvas = FindFirstObjectByType<Canvas>();
-            if (canvas == null)
-                return null;
-
-            Transform candidate = canvas.transform.Find(legacyOverlayBackgroundName);
-            if (candidate == null)
-                candidate = FindDeep(canvas.transform, legacyOverlayBackgroundName);
-
-            _legacyOverlayBackground = candidate != null ? candidate.GetComponent<Image>() : null;
-            return _legacyOverlayBackground;
-        }
-
-        private SpriteRenderer GetOrCreateBackdropRenderer(ref SpriteRenderer renderer, string objectName, Sprite sprite, int sortingOrder)
-        {
-            if (renderer == null)
-            {
-                renderer = FindOrCreateBackdropRenderer(objectName);
-            }
-
-            renderer.sprite = sprite;
-            renderer.sortingOrder = sortingOrder;
-            renderer.enabled = true;
-            return renderer;
-        }
-
-        private SpriteRenderer FindOrCreateBackdropRenderer(string objectName)
-        {
-            SpriteRenderer foundRenderer = null;
-
-            for (int i = transform.childCount - 1; i >= 0; i--)
-            {
-                Transform child = transform.GetChild(i);
-                if (child == null || child.name != objectName)
-                    continue;
-
-                var childRenderer = child.GetComponent<SpriteRenderer>();
-                if (childRenderer == null)
-                    continue;
-
-                if (foundRenderer == null)
-                {
-                    foundRenderer = childRenderer;
-                    continue;
-                }
-
-                if (Application.isPlaying)
-                    Destroy(child.gameObject);
-                else
-                    DestroyImmediate(child.gameObject);
-            }
-
-            if (foundRenderer != null)
-                return foundRenderer;
-
-            var go = new GameObject(objectName, typeof(SpriteRenderer));
-            go.transform.SetParent(transform, false);
-            return go.GetComponent<SpriteRenderer>();
-        }
-
-        private void ScaleRendererToCamera(SpriteRenderer renderer, Camera camera, bool preserveAspectCover)
-        {
-            if (renderer == null || renderer.sprite == null || camera == null)
-                return;
-
-            Vector2 spriteSize = renderer.sprite.bounds.size;
-            if (spriteSize.x <= 0f || spriteSize.y <= 0f)
-                return;
-
-            float worldHeight = camera.orthographicSize * 2f;
-            float worldWidth = worldHeight * camera.aspect;
-
-            if (preserveAspectCover)
-            {
-                float scale = Mathf.Max(worldWidth / spriteSize.x, worldHeight / spriteSize.y);
-                renderer.transform.localScale = new Vector3(scale, scale, 1f);
-                return;
-            }
-
-            renderer.transform.localScale = new Vector3(
-                worldWidth / spriteSize.x,
-                worldHeight / spriteSize.y,
-                1f);
-        }
-
-        private Sprite GetGeneratedBackdropSprite()
-        {
-            if (_generatedBackdropSprite != null)
-                return _generatedBackdropSprite;
-
-            const int size = 4;
-            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
-            texture.name = "GameplayBackdropRuntime";
-            texture.hideFlags = HideFlags.HideAndDontSave;
-
-            Color[] pixels = new Color[size * size];
-            for (int i = 0; i < pixels.Length; i++)
-                pixels[i] = Color.white;
-
-            texture.SetPixels(pixels);
-            texture.Apply(false, true);
-
-            _generatedBackdropSprite = Sprite.Create(
-                texture,
-                new Rect(0f, 0f, size, size),
-                new Vector2(0.5f, 0.5f),
-                size);
-            _generatedBackdropSprite.name = "GameplayBackdropRuntimeSprite";
-            _generatedBackdropSprite.hideFlags = HideFlags.HideAndDontSave;
-            return _generatedBackdropSprite;
-        }
-
-        private static Transform FindDeep(Transform root, string childName)
-        {
-            if (root == null)
-                return null;
-
-            for (int i = 0; i < root.childCount; i++)
-            {
-                Transform child = root.GetChild(i);
-                if (child.name == childName)
-                    return child;
-
-                Transform nested = FindDeep(child, childName);
-                if (nested != null)
-                    return nested;
-            }
-
-            return null;
         }
     }
 }

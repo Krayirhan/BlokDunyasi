@@ -35,6 +35,26 @@ namespace BlockPuzzle.UnityAdapter.Privacy
         public static bool CanCollectAnalytics => CurrentState == ConsentState.Accepted;
         public static bool CanInitializeAds => CurrentState == ConsentState.Accepted;
 
+        /// <summary>
+        /// True when ads were started without a confirmed UMP consent decision
+        /// (e.g. the consent watchdog gave up waiting on a hung native
+        /// callback). While true, ad requests must be marked non-personalized
+        /// (npa=1) since we cannot prove the user actually consented to
+        /// personalization. Not persisted -- re-evaluated fresh every launch.
+        /// </summary>
+        public static bool RequireNonPersonalizedAds { get; set; }
+
+        public static void ResetForTesting()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            _loaded = true;
+            _currentState = ConsentState.Unknown;
+            PlayerPrefs.DeleteKey(ConsentStateKey);
+            PlayerPrefs.Save();
+            ConsentStateChanged?.Invoke(_currentState);
+#endif
+        }
+
         public static void SetConsentState(ConsentState state)
         {
             EnsureLoaded();

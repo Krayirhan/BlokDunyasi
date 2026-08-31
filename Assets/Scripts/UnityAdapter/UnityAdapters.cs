@@ -308,6 +308,8 @@ namespace BlockPuzzle.UnityAdapter
         public int[] ActiveBlockColorIds;
         public int MoveCount;
         public int TotalLinesCleared;
+        public int RescueCount;
+        public string GameMode;
         public long GameStartTimeBinary;
         public long LastMoveTimeBinary;
         public bool IsGameOver;
@@ -343,6 +345,8 @@ namespace BlockPuzzle.UnityAdapter
                 ActiveBlockColorIds = data.ActiveBlockColorIds,
                 MoveCount = data.MoveCount,
                 TotalLinesCleared = data.TotalLinesCleared,
+                RescueCount = data.RescueCount,
+                GameMode = data.GameMode,
                 GameStartTimeBinary = data.GameStartTime.ToBinary(),
                 LastMoveTimeBinary = data.LastMoveTime.ToBinary(),
                 IsGameOver = data.IsGameOver,
@@ -369,6 +373,8 @@ namespace BlockPuzzle.UnityAdapter
                 ActiveBlockColorIds = ActiveBlockColorIds,
                 MoveCount = MoveCount,
                 TotalLinesCleared = TotalLinesCleared,
+                RescueCount = RescueCount,
+                GameMode = GameMode,
                 GameStartTime = DateTime.FromBinary(GameStartTimeBinary),
                 LastMoveTime = DateTime.FromBinary(LastMoveTimeBinary),
                 IsGameOver = IsGameOver,

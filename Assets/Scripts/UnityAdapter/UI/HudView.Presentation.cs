@@ -44,10 +44,14 @@ namespace BlockPuzzle.UnityAdapter.UI
                     return;
                 }
 
-                owner.scoreBreakdownText.text =
-                    $"v{breakdown.FormulaVersion} | base:{breakdown.BaseScore} " +
-                    $"line x{breakdown.LineClearMultiplier:F2} combo x{breakdown.ComboMultiplier:F2} " +
-                    $"=> +{breakdown.ScoreDelta} (total {breakdown.TotalScore})";
+                var sb = breakdown.Breakdown;
+                owner.scoreBreakdownText.text = 
+                    (sb.PlacementScore > 0 ? $"<color=grey>+{sb.PlacementScore} placement</color>\n" : "") +
+                    (sb.LineClearScore > 0 ? $"<color=orange>+{sb.LineClearScore:N0} {sb.LinesCleared} LINE TEMİZLENDİ</color>\n" : "") +
+                    (sb.ComboBonus > 0 ? $"<color=purple>+{sb.ComboBonus:N0} KOMBO {sb.ComboCount}</color>\n" : "") +
+                    (sb.RiskBonus > 0 ? $"<color=blue>+{sb.RiskBonus} {(sb.IsCornerBonus ? "KÖŞE" : "KENAR")} BONUSU</color>\n" : "") +
+                    "━━━━━━━━━━━━━━\n" +
+                    $"<b>TOPLAM +{sb.TotalGained:N0}</b>";
             }
 
             public static void UpdateGameInfo(HudView owner)
@@ -112,7 +116,22 @@ namespace BlockPuzzle.UnityAdapter.UI
 
             public static void ShowMoveQualityFeedback(HudView owner, ScoreBreakdownInfo breakdown)
             {
-                if (owner.gameStatusText == null || breakdown.ScoreDelta <= 0)
+                if (owner.gameStatusText == null)
+                    return;
+
+                var sb = breakdown.Breakdown;
+                if (sb.UsedGrace)
+                {
+                    owner.ShowTransientStatusMessage(TrEn("KOMBO KORUNDU – Hazırlık Hamlesi", "COMBO PRESERVED – Setup Move"), 1.5f);
+                    return;
+                }
+                if (sb.ComboBroken)
+                {
+                    owner.ShowTransientStatusMessage(TrEn("KOMBO KIRILDI", "COMBO BROKEN"), 1.5f);
+                    return;
+                }
+
+                if (breakdown.ScoreDelta <= 0)
                     return;
 
                 string quality = ResolveMoveQualityLabel(breakdown);

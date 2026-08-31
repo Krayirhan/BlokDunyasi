@@ -72,27 +72,33 @@ namespace BlockPuzzle.UnityAdapter.Animation
             string animId = $"block_place_{blockObject.GetInstanceID()}";
             CancelAnimation(animId);
 
-            StartCoroutine(BlockPlacementAnimRoutine(blockObject, 0.3f, () =>
+            Coroutine routine = StartCoroutine(BlockPlacementAnimRoutine(blockObject, 0.3f, () =>
             {
                 _activeAnimations.Remove(animId);
                 onComplete?.Invoke();
             }));
 
-            _activeAnimations[animId] = new ActiveAnimation { Id = animId, TargetObject = blockObject };
+            _activeAnimations[animId] = new ActiveAnimation { Id = animId, TargetObject = blockObject, Routine = routine };
         }
 
         private IEnumerator BlockPlacementAnimRoutine(GameObject blockObject, float duration, Action onComplete)
         {
-            Vector3 originalScale = blockObject.transform.localScale;
+            Transform target = blockObject.transform;
+            Vector3 baseScale = target.localScale;
+            Vector3 lastAppliedScale = baseScale;
             float elapsed = 0f;
 
             // Scale settle anim (1.0 → 0.95 → 1.0) = landing feel
             while (elapsed < duration * 0.5f)
             {
+                if (blockObject == null)
+                    yield break;
+
                 elapsed += Time.deltaTime;
                 float t = elapsed / (duration * 0.5f);
                 float eased = EaseOutQuad(t);
-                blockObject.transform.localScale = Vector3.Lerp(originalScale, new Vector3(0.95f, 0.95f, 1f), eased);
+                float factor = Mathf.Lerp(1f, 0.95f, eased);
+                ApplyRelativeScale(target, ref baseScale, ref lastAppliedScale, factor);
                 yield return null;
             }
 
@@ -100,15 +106,40 @@ namespace BlockPuzzle.UnityAdapter.Animation
             elapsed = 0f;
             while (elapsed < duration * 0.5f)
             {
+                if (blockObject == null)
+                    yield break;
+
                 elapsed += Time.deltaTime;
                 float t = elapsed / (duration * 0.5f);
                 float eased = EaseInQuad(t);
-                blockObject.transform.localScale = Vector3.Lerp(new Vector3(0.95f, 0.95f, 1f), originalScale, eased);
+                float factor = Mathf.Lerp(0.95f, 1f, eased);
+                ApplyRelativeScale(target, ref baseScale, ref lastAppliedScale, factor);
                 yield return null;
             }
 
-            blockObject.transform.localScale = originalScale;
+            ApplyRelativeScale(target, ref baseScale, ref lastAppliedScale, 1f);
             onComplete?.Invoke();
+        }
+
+        private static void ApplyRelativeScale(
+            Transform target,
+            ref Vector3 baseScale,
+            ref Vector3 lastAppliedScale,
+            float nextFactor)
+        {
+            Vector3 currentScale = target.localScale;
+            if (!Approximately(currentScale, lastAppliedScale))
+                baseScale = currentScale;
+
+            lastAppliedScale = new Vector3(baseScale.x * nextFactor, baseScale.y * nextFactor, baseScale.z);
+            target.localScale = lastAppliedScale;
+        }
+
+        private static bool Approximately(Vector3 a, Vector3 b)
+        {
+            return Mathf.Abs(a.x - b.x) < 0.0001f &&
+                   Mathf.Abs(a.y - b.y) < 0.0001f &&
+                   Mathf.Abs(a.z - b.z) < 0.0001f;
         }
 
         /// <summary>
@@ -771,6 +802,8 @@ namespace BlockPuzzle.UnityAdapter.Animation
         {
             if (_activeAnimations.TryGetValue(animId, out var anim))
             {
+                if (anim.Routine != null)
+                    StopCoroutine(anim.Routine);
                 _activeAnimations.Remove(animId);
             }
         }
@@ -799,6 +832,7 @@ namespace BlockPuzzle.UnityAdapter.Animation
             public string Id { get; set; }
             public GameObject TargetObject { get; set; }
             public float Duration { get; set; }
+            public Coroutine Routine { get; set; }
         }
 
         private class CameraShakeState

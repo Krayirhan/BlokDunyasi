@@ -52,7 +52,10 @@ public class GameBootstrap : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Initialize()
     {
-        // Singleton olusumunu garanti et
+        // AppInitializer'ı Start'a bırakma. RuntimeInitialize callback'i ile
+        // reklam başlangıcını sahne yaşam döngüsünden bağımsız garanti et.
         _ = Instance;
+        _ = AppInitializer.Instance;
+        UnityEngine.Debug.Log("[GameBootstrap] AppInitializer otomatik olarak baslatildi.");
     }
 }

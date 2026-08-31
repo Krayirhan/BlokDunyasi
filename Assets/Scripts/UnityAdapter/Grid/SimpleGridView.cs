@@ -579,9 +579,10 @@ namespace BlockPuzzle.UnityAdapter.Grid
 
             if (!Application.isPlaying)
             {
+#if UNITY_EDITOR
                 if (mirrorTrayBlockVisuals && sourceTray == null)
                     sourceTray = TryAutoAssignSingleton<NewBlockTray>();
-
+#endif
                 ClearEditorGeneratedGrid();
                 return;
             }
@@ -745,11 +746,14 @@ namespace BlockPuzzle.UnityAdapter.Grid
 
         private Sprite GetDropPreviewSprite(int colorId)
         {
-            if (colorId > 0 && spriteConfig != null)
+            // Theme block sprites can be large decorative panels (for example
+            // the fabric/heart art). Placement ghosts must use the dedicated
+            // cell-sized preview sprite instead of rendering that artwork.
+            if (spriteConfig != null)
             {
-                Sprite blockSprite = spriteConfig.GetBlockSpriteByColorId(colorId);
-                if (blockSprite != null)
-                    return blockSprite;
+                Sprite previewSprite = spriteConfig.GetPreviewSprite(true);
+                if (previewSprite != null)
+                    return previewSprite;
             }
 
             return GetDefaultSquareSprite();

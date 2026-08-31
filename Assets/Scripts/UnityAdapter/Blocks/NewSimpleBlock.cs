@@ -80,6 +80,7 @@ namespace BlockPuzzle.UnityAdapter.Blocks
         private Sprite _defaultSprite;
         private int _lastColorGradingVersion = -1;
         private SortingGroup _sortingGroup;
+        private Coroutine _dragScaleRoutine;
 
         public void Initialize(ShapeDefinition shape, BlockSpriteConfig config, int slotIndex = 0, int colorId = -1)
         {
@@ -319,6 +320,7 @@ namespace BlockPuzzle.UnityAdapter.Blocks
             if (IsDragging) return;
             IsDragging = true;
             ApplyDragVisuals(true);
+            StartScaleTransition(dragScale, 0.12f);
         }
 
         public void EndDrag()
@@ -326,6 +328,33 @@ namespace BlockPuzzle.UnityAdapter.Blocks
             if (!IsDragging) return;
             IsDragging = false;
             ApplyDragVisuals(false);
+            StartScaleTransition(normalScale, 0.1f);
+        }
+
+        private void StartScaleTransition(Vector3 targetScale, float duration)
+        {
+            if (_dragScaleRoutine != null)
+                StopCoroutine(_dragScaleRoutine);
+
+            _dragScaleRoutine = StartCoroutine(ScaleTransitionRoutine(targetScale, duration));
+        }
+
+        private System.Collections.IEnumerator ScaleTransitionRoutine(Vector3 targetScale, float duration)
+        {
+            Vector3 startScale = transform.localScale;
+            float elapsed = 0f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / Mathf.Max(0.01f, duration));
+                float eased = 1f - Mathf.Pow(1f - t, 3f);
+                transform.localScale = Vector3.LerpUnclamped(startScale, targetScale, eased);
+                yield return null;
+            }
+
+            transform.localScale = targetScale;
+            _dragScaleRoutine = null;
         }
 
         public void UpdateDragPosition(Vector3 worldPos)
@@ -441,10 +470,27 @@ namespace BlockPuzzle.UnityAdapter.Blocks
 
         public void PrepareForPool()
         {
+            CancelTransientAnimations();
             IsUsed = false;
             transform.localScale = Vector3.one;
-            EndDrag();
+            IsDragging = false;
+            ApplyDragVisuals(false);
             gameObject.SetActive(false);
+        }
+
+        private void CancelTransientAnimations()
+        {
+            if (_dragScaleRoutine != null)
+            {
+                StopCoroutine(_dragScaleRoutine);
+                _dragScaleRoutine = null;
+            }
+
+            if (_shakeRoutine != null)
+            {
+                StopCoroutine(_shakeRoutine);
+                _shakeRoutine = null;
+            }
         }
 
         private void ApplyDragVisuals(bool dragging)

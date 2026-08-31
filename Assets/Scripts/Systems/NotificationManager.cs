@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using BlockPuzzle.Core.Common;
 using UnityEngine;
 using Debug = BlockPuzzle.Core.Common.GameLogger;
@@ -8,31 +7,32 @@ using Unity.Notifications.Android;
 #endif
 
 /// <summary>
-/// Local Push Notifications yönetir.
-/// Oyuncu uygulamadan çıktıktan sonra belirli aralıklarla "Bloklar kırılmayı bekliyor!" gibi komik bildirimler gönderir.
+/// Manages local notifications for reminders and update availability.
 /// </summary>
 public class NotificationManager : MonoBehaviour
 {
     private static NotificationManager instance;
-    private const string DAILY_REMINDER_CHANNEL = "blok_dunyasi_daily";
+
+    private const string DailyReminderChannel = "blok_dunyasi_daily";
+    private const string UpdateReminderChannel = "blok_dunyasi_updates";
     private const int DailyReminderHour = 19;
     private const int NewFeaturesDelayDays = 3;
     private const int ComboReminderDelayHours = 12;
+    private const int UpdateReminderDelayHours = 2;
 
-    // Bildirim mesajları
-    private static readonly string[] DailyReminderMessages = new string[]
+    private static readonly string[] DailyReminderMessages =
     {
-        "Bloklar kendi kendine kırılmıyor! Hadi aç ve çöz! 🧱",
-        "Rekorunu kır! Bloklar seni bekliyor! 🏆",
-        "Yeni günün yeni rekorları, başla! 💪",
-        "Blok Dünyası seni özledii! Gel oynamayı devam et! 👋",
-        "30 saniyede kaç blok kıracaksın? Merak ediyoruz! 🤔",
+        "Bloklar kendi kendine kirilmiyor. Ac ve coz.",
+        "Rekorunu kir. Bloklar seni bekliyor.",
+        "Yeni gun, yeni rekorlar. Basla.",
+        "Blok Dunyasi seni bekliyor. Devam et.",
+        "30 saniyede kac blok kiracaksin?"
     };
 
-    private static readonly string[] NewFeaturesMessages = new string[]
+    private static readonly string[] NewFeaturesMessages =
     {
-        "Yeni özellikleri keşfet! Blok Dünyası güncellendi! ✨",
-        "Oyun gelişti, sen yetiştin mi? Kontrol et! 🆕",
+        "Yeni ozellikleri kesfet. Blok Dunyasi guncellendi.",
+        "Oyunda yenilik var. Kontrol et."
     };
 
     public static NotificationManager Instance
@@ -45,6 +45,7 @@ public class NotificationManager : MonoBehaviour
                 instance = obj.AddComponent<NotificationManager>();
                 DontDestroyOnLoad(obj);
             }
+
             return instance;
         }
     }
@@ -62,159 +63,247 @@ public class NotificationManager : MonoBehaviour
         }
     }
 
+    private void OnEnable()
+    {
+#if UNITY_ANDROID
+        SubscribeUpdateSignals();
+#endif
+    }
+
+    private void OnDisable()
+    {
+#if UNITY_ANDROID
+        UnsubscribeUpdateSignals();
+#endif
+    }
+
     private void Start()
     {
 #if UNITY_ANDROID
-        // Android bildirim channel'ını oluştur
-        CreateNotificationChannel();
-        
-        // Oyuncu tercihe göre bildirimler göndermeyi başlat
+        CreateNotificationChannels();
+        SubscribeUpdateSignals();
         ScheduleNotifications();
 #endif
     }
 
 #if UNITY_ANDROID
-    /// <summary>
-    /// Bildirim channel'ı oluştur (Android 8.0+)
-    /// </summary>
-    private void CreateNotificationChannel()
+    private void CreateNotificationChannels()
     {
         try
         {
-            var channel = new AndroidNotificationChannel()
+            AndroidNotificationCenter.RegisterNotificationChannel(new AndroidNotificationChannel
             {
-                Id = DAILY_REMINDER_CHANNEL,
-                Name = "Blok Dünyası Hatırlatmaları",
-                Description = "Günlük oyun hatırlatmaları ve yeni özellik duyuruları",
+                Id = DailyReminderChannel,
+                Name = "Blok Dunyasi Hatirlatmalari",
+                Description = "Gunluk oyun hatirlatmalari ve duyurular",
                 Importance = Importance.Default,
-                CanBypassDnd = false,
-            };
+                CanBypassDnd = false
+            });
 
-            AndroidNotificationCenter.RegisterNotificationChannel(channel);
+            AndroidNotificationCenter.RegisterNotificationChannel(new AndroidNotificationChannel
+            {
+                Id = UpdateReminderChannel,
+                Name = "Blok Dunyasi Guncellemeleri",
+                Description = "Yeni surum hatirlatmalari",
+                Importance = Importance.Default,
+                CanBypassDnd = false
+            });
 
-            Debug.Log("[NotificationManager] Bildirim channel'ı oluşturuldu.");
+            Debug.Log("[NotificationManager] Notification channels registered.");
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
-            Debug.LogError($"[NotificationManager] Channel oluşturma hatası: {ex.Message}");
+            Debug.LogError($"[NotificationManager] Channel registration failed: {ex.Message}");
         }
     }
 
-    /// <summary>
-    /// Kullanıcı tercihlerine göre bildirimler zamanla
-    /// </summary>
     private void ScheduleNotifications()
     {
-        // SettingsManager'dan bildirim tercihlerini oku
         bool dailyReminderEnabled = PlayerPrefs.GetInt(SettingsKeys.DailyReminder, 1) == 1;
         bool newFeaturesEnabled = PlayerPrefs.GetInt(SettingsKeys.NewFeatures, 1) == 1;
 
-        // Önceki bildirimleri temizle
-        AndroidNotificationCenter.CancelAllNotifications();
+        AndroidNotificationCenter.CancelAllScheduledNotifications();
 
         if (dailyReminderEnabled)
-        {
             SendDailyReminderNotification();
-        }
 
         if (newFeaturesEnabled)
-        {
             SendNewFeaturesNotification();
-        }
+
+        if (newFeaturesEnabled)
+            RefreshUpdateReminderFromState();
+        else
+            CancelStoredUpdateReminderOnly();
     }
 
-    /// <summary>
-    /// Günlük hatırlatma bildirimi gönder
-    /// </summary>
     private void SendDailyReminderNotification()
     {
         try
         {
-            // Rastgele bir mesaj seç
             string message = DailyReminderMessages[UnityEngine.Random.Range(0, DailyReminderMessages.Length)];
+            var notification = new AndroidNotification
+            {
+                Title = "Blok Dunyasi",
+                Text = message,
+                SmallIcon = "icon_0",
+                FireTime = GetNextLocalNotificationTime(DailyReminderHour)
+            };
 
-            var notification = new AndroidNotification();
-            notification.Title = "Blok Dünyası";
-            notification.Text = message;
-            notification.SmallIcon = "icon_0";
-            notification.FireTime = GetNextLocalNotificationTime(DailyReminderHour);
-
-            AndroidNotificationCenter.SendNotification(notification, DAILY_REMINDER_CHANNEL);
-
-            Debug.Log($"[NotificationManager] Günlük bildirim zamanlandı: '{message}'");
+            AndroidNotificationCenter.SendNotification(notification, DailyReminderChannel);
+            Debug.Log($"[NotificationManager] Daily reminder scheduled: '{message}'");
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
-            Debug.LogError($"[NotificationManager] Günlük bildirim gönderme hatası: {ex.Message}");
+            Debug.LogError($"[NotificationManager] Daily reminder failed: {ex.Message}");
         }
     }
 
-    /// <summary>
-    /// Yeni özellikler bildirimi gönder
-    /// </summary>
     private void SendNewFeaturesNotification()
     {
         try
         {
-            // Rastgele bir mesaj seç
             string message = NewFeaturesMessages[UnityEngine.Random.Range(0, NewFeaturesMessages.Length)];
+            var notification = new AndroidNotification
+            {
+                Title = "Guncelleme Duyurusu",
+                Text = message,
+                SmallIcon = "icon_0",
+                FireTime = DateTime.Now.AddDays(NewFeaturesDelayDays)
+            };
 
-            var notification = new AndroidNotification();
-            notification.Title = "Güncellemeler Mevcut!";
-            notification.Text = message;
-            notification.SmallIcon = "icon_0";
-            notification.FireTime = DateTime.Now.AddDays(NewFeaturesDelayDays);
-
-            AndroidNotificationCenter.SendNotification(notification, DAILY_REMINDER_CHANNEL);
-
-            Debug.Log($"[NotificationManager] Yeni özellik bildirimi zamanlandı: '{message}'");
+            AndroidNotificationCenter.SendNotification(notification, DailyReminderChannel);
+            Debug.Log($"[NotificationManager] Feature update notification scheduled: '{message}'");
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
-            Debug.LogError($"[NotificationManager] Yeni özellik bildirimi gönderme hatası: {ex.Message}");
+            Debug.LogError($"[NotificationManager] Feature update notification failed: {ex.Message}");
         }
     }
 
-    /// <summary>
-    /// Combo kombo ayarı bildirimi gönder (isteğe bağlı, belirli bir combo skor sonrasında)
-    /// </summary>
     public void SendComboNotification(int comboCount)
     {
-        if (!PlayerPrefs.HasKey("ComboNotificationTime")) return;
+        if (!PlayerPrefs.HasKey("ComboNotificationTime"))
+            return;
 
         try
         {
-            string message = $"Wow! {comboCount} kombo! Yeni rekor mu yaptın? Kontrol et! 🔥";
+            var notification = new AndroidNotification
+            {
+                Title = "Harika Combo",
+                Text = $"Wow. {comboCount} kombo yaptin. Tekrar bak.",
+                SmallIcon = "icon_0",
+                FireTime = DateTime.Now.AddHours(ComboReminderDelayHours)
+            };
 
-            var notification = new AndroidNotification();
-            notification.Title = "Harika Combo!";
-            notification.Text = message;
-            notification.SmallIcon = "icon_0";
-            notification.FireTime = DateTime.Now.AddHours(ComboReminderDelayHours);
-
-            AndroidNotificationCenter.SendNotification(notification, DAILY_REMINDER_CHANNEL);
-
-            Debug.Log($"[NotificationManager] Combo bildirimi gönderildi: '{message}'");
+            AndroidNotificationCenter.SendNotification(notification, DailyReminderChannel);
+            Debug.Log($"[NotificationManager] Combo notification scheduled for combo={comboCount}");
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
-            Debug.LogError($"[NotificationManager] Combo bildirimi hatası: {ex.Message}");
+            Debug.LogError($"[NotificationManager] Combo notification failed: {ex.Message}");
         }
     }
 
-    /// <summary>
-    /// Oyuncu ayarlarında tercihler değiştiğinde cagırılacak method
-    /// </summary>
     public void RefreshNotifications()
     {
         ScheduleNotifications();
-        Debug.Log("[NotificationManager] Bildirimler yenilendi.");
+        Debug.Log("[NotificationManager] Notifications refreshed.");
+    }
+
+    public void ScheduleUpdateReminder(string storeVersion)
+    {
+        bool newFeaturesEnabled = PlayerPrefs.GetInt(SettingsKeys.NewFeatures, 1) == 1;
+        if (!newFeaturesEnabled)
+        {
+            CancelStoredUpdateReminderOnly();
+            return;
+        }
+
+        string normalizedStoreVersion = string.IsNullOrWhiteSpace(storeVersion) ? "latest" : storeVersion.Trim();
+        PlayerPrefs.SetString(SettingsKeys.UpdateReminderStoreVersion, normalizedStoreVersion);
+        PlayerPrefs.Save();
+
+        try
+        {
+            var immediateNotification = new AndroidNotification
+            {
+                Title = "Guncelleme Hazir",
+                Text = $"Yeni surum mevcut. Oyun: {Application.version}, Magaza: {normalizedStoreVersion}.",
+                SmallIcon = "icon_0",
+                FireTime = DateTime.Now.AddSeconds(5)
+            };
+
+            AndroidNotificationCenter.SendNotification(immediateNotification, UpdateReminderChannel);
+
+            var notification = new AndroidNotification
+            {
+                Title = "Guncelleme Hazir",
+                Text = $"Yeni surum mevcut. Oyun: {Application.version}, Magaza: {normalizedStoreVersion}.",
+                SmallIcon = "icon_0",
+                FireTime = DateTime.Now.AddHours(UpdateReminderDelayHours),
+                RepeatInterval = TimeSpan.FromHours(UpdateReminderDelayHours)
+            };
+
+            AndroidNotificationCenter.SendNotification(notification, UpdateReminderChannel);
+            Debug.Log($"[NotificationManager] Update reminder scheduled. StoreVersion={normalizedStoreVersion}");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[NotificationManager] Update reminder scheduling failed: {ex.Message}");
+        }
+    }
+
+    private void SubscribeUpdateSignals()
+    {
+        if (InAppUpdateManager.Instance == null)
+            return;
+
+        InAppUpdateManager.Instance.OnUpdateAvailabilityEvaluated -= HandleUpdateAvailabilityEvaluated;
+        InAppUpdateManager.Instance.OnUpdateAvailabilityEvaluated += HandleUpdateAvailabilityEvaluated;
+    }
+
+    private void UnsubscribeUpdateSignals()
+    {
+        if (InAppUpdateManager.Instance == null)
+            return;
+
+        InAppUpdateManager.Instance.OnUpdateAvailabilityEvaluated -= HandleUpdateAvailabilityEvaluated;
+    }
+
+    private void HandleUpdateAvailabilityEvaluated(bool isAvailable, string storeVersion)
+    {
+        if (isAvailable)
+        {
+            ScheduleUpdateReminder(storeVersion);
+            return;
+        }
+
+        CancelStoredUpdateReminderOnly();
+    }
+
+    private void RefreshUpdateReminderFromState()
+    {
+        if (InAppUpdateManager.Instance != null && InAppUpdateManager.Instance.IsUpdateAvailable)
+        {
+            ScheduleUpdateReminder(InAppUpdateManager.Instance.AvailableStoreVersion);
+            return;
+        }
+
+        string storedVersion = PlayerPrefs.GetString(SettingsKeys.UpdateReminderStoreVersion, string.Empty);
+        if (!string.IsNullOrWhiteSpace(storedVersion))
+            ScheduleUpdateReminder(storedVersion);
+    }
+
+    private void CancelStoredUpdateReminderOnly()
+    {
+        PlayerPrefs.DeleteKey(SettingsKeys.UpdateReminderStoreVersion);
+        PlayerPrefs.Save();
     }
 
     private static DateTime GetNextLocalNotificationTime(int preferredHour)
     {
-        var now = DateTime.Now;
-        var scheduled = new DateTime(now.Year, now.Month, now.Day, preferredHour, 0, 0);
+        DateTime now = DateTime.Now;
+        DateTime scheduled = new DateTime(now.Year, now.Month, now.Day, preferredHour, 0, 0);
 
         if (scheduled <= now)
             scheduled = scheduled.AddDays(1);
@@ -222,8 +311,8 @@ public class NotificationManager : MonoBehaviour
         return scheduled;
     }
 #else
-    private void ScheduleNotifications() { }
     public void SendComboNotification(int comboCount) { }
     public void RefreshNotifications() { }
+    public void ScheduleUpdateReminder(string storeVersion) { }
 #endif
 }

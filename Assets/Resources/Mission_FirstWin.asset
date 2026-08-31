@@ -12,11 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 585b4e91d2ce57942a989a529f57756e, type: 3}
   m_Name: Mission_FirstWin
   m_EditorClassIdentifier: BlockPuzzleUnityAdapter::BlockPuzzle.Core.Meta.Missions.MissionDefinition
-  id: 
-  title: 
-  description: 
+  id: daily_clear_3
+  title: 3 satır temizle
+  description: Bir oyun içinde toplam 3 satır temizle.
   missionType: 0
   goalType: 0
-  targetAmount: 0
-  rewardId: 
-  rewardAmount: 0
+  targetAmount: 3
+  rewardId: continue_token
+  rewardAmount: 1

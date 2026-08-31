@@ -220,8 +220,8 @@ namespace BlockPuzzle.UnityAdapter.UI
         /// </summary>
         public void ShowFloatingScore(int points, Vector2 worldPos)
         {
-            // TODO: Implement floating score text animation
-            // This would create a temporary text that floats up and fades
+            // Score popups are owned by AnimationIntegration. Keep this legacy
+            // entry point side-effect free to avoid spawning a duplicate popup.
         }
 
         /// <summary>

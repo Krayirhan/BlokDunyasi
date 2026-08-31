@@ -1,6 +1,5 @@
 using TMPro;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using Debug = BlockPuzzle.Core.Common.GameLogger;
@@ -8,7 +7,7 @@ using Debug = BlockPuzzle.Core.Common.GameLogger;
 namespace BlockPuzzle.UnityAdapter.UI
 {
     [RequireComponent(typeof(Button))]
-    public sealed class ThemeTestButtonController : MonoBehaviour, IPointerClickHandler
+    public sealed class ThemeTestButtonController : MonoBehaviour
     {
         [SerializeField] private Button button;
         [SerializeField] private TMP_Text label;
@@ -21,13 +20,6 @@ namespace BlockPuzzle.UnityAdapter.UI
 
         private void Awake()
         {
-            if (Application.isPlaying)
-            {
-                gameObject.SetActive(false);
-                enabled = false;
-                return;
-            }
-
             if (button == null)
                 button = GetComponent<Button>();
 
@@ -61,22 +53,21 @@ namespace BlockPuzzle.UnityAdapter.UI
                 CycleTheme();
         }
 
-        public void OnPointerClick(PointerEventData eventData)
-        {
-            CycleTheme();
-        }
-
         public void CycleTheme()
         {
             int currentThemeId = UISettingsProfile.GetThemeId();
-            int nextThemeId = (currentThemeId + 1) % 3;
-            UISettingsProfile.SetThemeId(nextThemeId);
+            int nextThemeId = currentThemeId >= UISettingsProfile.ThemeClassic &&
+                              currentThemeId <= UISettingsProfile.ThemeWood
+                ? (currentThemeId + 1) % 4
+                : UISettingsProfile.ThemeClassic;
 
             if (_themeController == null)
                 _themeController = GameSceneThemeController.GetOrCreateRuntimeController();
 
             if (_themeController != null)
-                _themeController.ApplyThemeById(nextThemeId);
+                _themeController.ApplyManualThemeById(nextThemeId);
+            else
+                UISettingsProfile.SetThemeId(nextThemeId);
 
             if (verboseLogs)
                 Debug.Log($"[ThemeTestButtonController] Theme changed: {currentThemeId} -> {nextThemeId}, controllerFound={_themeController != null}");

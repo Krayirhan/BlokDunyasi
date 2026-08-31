@@ -10,7 +10,6 @@ public class SafeAreaRootSetup : MonoBehaviour
     [Header("Setup Options")]
     [SerializeField] private Canvas targetCanvas;
     [SerializeField] private string safeAreaRootName = "SafeAreaRoot";
-    [SerializeField] private bool setupScreenLayoutManager = true;
 
     private void OnValidate()
     {
@@ -70,7 +69,7 @@ public class SafeAreaRootSetup : MonoBehaviour
     /// </summary>
     public static void SetupAllCanvasesInScene()
     {
-        var canvases = FindObjectsOfType<Canvas>();
+        var canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
         Debug.Log($"[SafeAreaRootSetup] Found {canvases.Length} Canvas(es). Processing...");
 
         foreach (var canvas in canvases)

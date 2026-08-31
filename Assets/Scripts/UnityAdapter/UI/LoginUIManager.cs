@@ -8,6 +8,8 @@ namespace BlockPuzzle.UnityAdapter.UI
 {
     public class LoginUIManager : MonoBehaviour
     {
+        private static readonly Vector2 LogoutButtonSize = new Vector2(200f, 60f);
+
         [Header("Buttons")]
         public Button playLoginButton;
         public Button guestLoginButton;
@@ -130,6 +132,7 @@ namespace BlockPuzzle.UnityAdapter.UI
                 logoutButton.gameObject.SetActive(hasRegisteredSession);
                 logoutButton.interactable = isReady && hasRegisteredSession;
                 SetButtonText(logoutButton, GetTranslation("Çıkış Yap", "Log Out", "로그아웃"));
+                NormalizeLogoutButtonLayout();
             }
 
             UpdateLoggedInUsernameText(hasRegisteredSession ? FirebaseManager.Instance.Username : null);
@@ -393,6 +396,30 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (button == null) return;
             var text = button.GetComponentInChildren<Text>(true);
             if (text != null) text.text = value;
+        }
+
+        private void NormalizeLogoutButtonLayout()
+        {
+            if (logoutButton == null)
+                return;
+
+            var rect = logoutButton.transform as RectTransform;
+            if (rect == null)
+                return;
+
+            rect.localScale = Vector3.one;
+            rect.sizeDelta = LogoutButtonSize;
+
+            var layoutElement = logoutButton.GetComponent<LayoutElement>();
+            if (layoutElement != null)
+            {
+                layoutElement.minWidth = LogoutButtonSize.x;
+                layoutElement.preferredWidth = LogoutButtonSize.x;
+                layoutElement.flexibleWidth = 0f;
+                layoutElement.minHeight = LogoutButtonSize.y;
+                layoutElement.preferredHeight = LogoutButtonSize.y;
+                layoutElement.flexibleHeight = 0f;
+            }
         }
 
         private void UpdateLoggedInUsernameText(string username)

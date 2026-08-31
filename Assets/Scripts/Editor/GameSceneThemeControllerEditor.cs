@@ -69,7 +69,7 @@ public class GameSceneThemeControllerEditor : Editor
         EditorGUILayout.LabelField("Theme Slots", EditorStyles.boldLabel);
         _selectedTheme.enumValueIndex = GUILayout.Toolbar(
             _selectedTheme.enumValueIndex,
-            new[] { "Theme 1", "Theme 2", "Theme 3" });
+            new[] { "Theme 1", "Theme 2", "Theme 3", "Theme 4", "Theme 5", "Theme 6", "Theme 7", "Theme 8", "Theme 9" });
 
         SerializedProperty activeTheme = GetActiveThemeProperty();
         if (activeTheme != null)
@@ -100,6 +100,9 @@ public class GameSceneThemeControllerEditor : Editor
                 case GameSceneThemeController.ThemeSlot.Theme3:
                     controller.CaptureCurrentToTheme3();
                     break;
+                default:
+                    Debug.LogWarning("Capture Current Scene is implemented only for Theme 1-3.");
+                    break;
             }
             EditorUtility.SetDirty(target);
         }
@@ -119,6 +122,12 @@ public class GameSceneThemeControllerEditor : Editor
         {
             1 => _theme2,
             2 => _theme3,
+            3 => serializedObject.FindProperty("theme4"),
+            4 => serializedObject.FindProperty("theme5"),
+            5 => serializedObject.FindProperty("theme6"),
+            6 => serializedObject.FindProperty("theme7"),
+            7 => serializedObject.FindProperty("theme8"),
+            8 => serializedObject.FindProperty("theme9"),
             _ => _theme1
         };
     }

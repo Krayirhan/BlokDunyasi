@@ -40,10 +40,12 @@ namespace BlockPuzzle.UnityAdapter.Audio
         [Header("Mix")]
         [SerializeField] [Range(0f, 1f)] private float musicVolumeMultiplier = 1f;
         [SerializeField] [Range(0f, 1f)] private float sfxVolumeMultiplier = 1f;
+        [SerializeField] [Range(0f, 0.2f)] private float comboMusicPitchBoost = 0.08f;
+        [SerializeField] [Min(2)] private int comboMusicThreshold = 2;
 
         [Header("Runtime Overrides")]
-        [SerializeField] private bool disableMusicPlayback = true;
-        [SerializeField] private bool disableSfxPlayback = true;
+        [SerializeField] private bool disableMusicPlayback = false;
+        [SerializeField] private bool disableSfxPlayback = false;
 
         [Header("Debug")]
         [SerializeField] private bool verboseLogs = false;
@@ -239,7 +241,8 @@ namespace BlockPuzzle.UnityAdapter.Audio
             if (!cue.TryPick(out var clip, out var volume, out var pitch))
                 return;
 
-            sfxSource.pitch = pitch;
+            float pitchFromIntensity = Mathf.Lerp(1f, 1.12f, Mathf.Clamp01((intensity - 1f) * 4f));
+            sfxSource.pitch = Mathf.Clamp(pitch * pitchFromIntensity, 0.5f, 2f);
             sfxSource.PlayOneShot(clip, volume * _sfxVolume * sfxVolumeMultiplier * Mathf.Max(0f, intensity));
         }
 
@@ -286,6 +289,7 @@ namespace BlockPuzzle.UnityAdapter.Audio
             // Kullanıcı isteği üzerine oyun müziği tamamen kapatıldı.
             if (disableMusicPlayback)
             {
+                musicSource.pitch = 1f;
                 if (musicSource != null && musicSource.isPlaying)
                     musicSource.Stop();
                 return;
@@ -297,6 +301,7 @@ namespace BlockPuzzle.UnityAdapter.Audio
             AudioClip targetClip = ResolveMusicClip(sceneName);
             if (!_musicEnabled || targetClip == null)
             {
+                musicSource.pitch = 1f;
                 if (musicSource.isPlaying)
                     musicSource.Stop();
                 musicSource.clip = null;
@@ -304,6 +309,7 @@ namespace BlockPuzzle.UnityAdapter.Audio
             }
 
             musicSource.volume = _musicVolume * musicVolumeMultiplier;
+            musicSource.pitch = 1f;
             if (musicSource.clip == targetClip && musicSource.isPlaying)
                 return;
 
@@ -356,11 +362,34 @@ namespace BlockPuzzle.UnityAdapter.Audio
         private void HandleScoreBreakdown(ScoreBreakdownInfo breakdown)
         {
             if (breakdown.LinesCleared > 0 && breakdown.ComboStreak >= 2)
+            {
+                ApplyComboMusicPitch(breakdown.ComboStreak);
                 PlayCombo(breakdown.ComboStreak);
+            }
+            else if (breakdown.LinesCleared > 0)
+            {
+                ApplyComboMusicPitch(0);
+            }
+        }
+
+        private void ApplyComboMusicPitch(int comboStreak)
+        {
+            if (musicSource == null)
+                return;
+
+            if (comboStreak < comboMusicThreshold)
+            {
+                musicSource.pitch = 1f;
+                return;
+            }
+
+            float normalized = Mathf.Clamp01((comboStreak - comboMusicThreshold) / 8f);
+            musicSource.pitch = 1f + (comboMusicPitchBoost * normalized);
         }
 
         private void HandleGameOver(int finalScore)
         {
+            ApplyComboMusicPitch(0);
             PlayGameOver();
         }
     }

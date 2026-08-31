@@ -6,7 +6,21 @@ namespace BlockPuzzle.Core.Meta
 {
     public class RewardInventory : MonoBehaviour
     {
-        public static RewardInventory Instance { get; private set; }
+        private static RewardInventory _instance;
+
+        public static RewardInventory Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    var inventoryObject = new GameObject("RewardInventory");
+                    _instance = inventoryObject.AddComponent<RewardInventory>();
+                }
+
+                return _instance;
+            }
+        }
 
         private Dictionary<string, int> inventory = new Dictionary<string, int>();
 
@@ -14,9 +28,9 @@ namespace BlockPuzzle.Core.Meta
 
         private void Awake()
         {
-            if (Instance == null)
+            if (_instance == null)
             {
-                Instance = this;
+                _instance = this;
                 DontDestroyOnLoad(gameObject);
             }
             else
@@ -27,6 +41,9 @@ namespace BlockPuzzle.Core.Meta
 
         public void AddReward(string rewardId, int amount)
         {
+            if (string.IsNullOrWhiteSpace(rewardId) || amount <= 0)
+                return;
+
             if (inventory.ContainsKey(rewardId))
             {
                 inventory[rewardId] += amount;
@@ -35,12 +52,21 @@ namespace BlockPuzzle.Core.Meta
             {
                 inventory[rewardId] = amount;
             }
+
+            PlayerPrefs.SetInt(GetRewardKey(rewardId), inventory[rewardId]);
+            PlayerPrefs.Save();
             
             OnInventoryUpdated?.Invoke(rewardId, inventory[rewardId]);
         }
 
         public int GetAmount(string rewardId)
         {
+            if (string.IsNullOrWhiteSpace(rewardId))
+                return 0;
+
+            if (!inventory.ContainsKey(rewardId))
+                inventory[rewardId] = PlayerPrefs.GetInt(GetRewardKey(rewardId), 0);
+
             return inventory.TryGetValue(rewardId, out int amount) ? amount : 0;
         }
 
@@ -49,10 +75,17 @@ namespace BlockPuzzle.Core.Meta
             if (GetAmount(rewardId) >= amount)
             {
                 inventory[rewardId] -= amount;
+                PlayerPrefs.SetInt(GetRewardKey(rewardId), inventory[rewardId]);
+                PlayerPrefs.Save();
                 OnInventoryUpdated?.Invoke(rewardId, inventory[rewardId]);
                 return true;
             }
             return false;
+        }
+
+        private static string GetRewardKey(string rewardId)
+        {
+            return $"reward_inventory_{rewardId}";
         }
     }
 }

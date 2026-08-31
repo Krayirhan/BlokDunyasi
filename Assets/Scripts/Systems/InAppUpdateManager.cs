@@ -16,6 +16,8 @@ public class InAppUpdateManager : MonoBehaviour
     private static InAppUpdateManager instance;
     private bool _isChecking;
     private bool _hasCheckedOnce;
+    private bool _isUpdateAvailable;
+    private string _availableStoreVersion = string.Empty;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
     private AppUpdateManager _appUpdateManager;
@@ -24,6 +26,10 @@ public class InAppUpdateManager : MonoBehaviour
     [Header("Update Ayarlari")]
     [SerializeField] private bool preferImmediateUpdate = true;
     [SerializeField] [Min(1)] private int optionalPromptCooldownHours = 12;
+
+    public event System.Action<bool, string> OnUpdateAvailabilityEvaluated;
+    public bool IsUpdateAvailable => _isUpdateAvailable;
+    public string AvailableStoreVersion => _availableStoreVersion;
 
     public static InAppUpdateManager Instance
     {
@@ -93,16 +99,20 @@ public class InAppUpdateManager : MonoBehaviour
         AppUpdateInfo appUpdateInfo = appUpdateInfoOp.GetResult();
         if (appUpdateInfo.UpdateAvailability != UpdateAvailability.UpdateAvailable)
         {
+            PublishUpdateAvailability(false, string.Empty);
             Debug.Log("[InAppUpdateManager] Play Store update yok.");
             _isChecking = false;
             yield break;
         }
 
+        string availableVersionCode = appUpdateInfo.AvailableVersionCode.ToString();
+        PublishUpdateAvailability(true, availableVersionCode);
+
         bool immediateAllowed = appUpdateInfo.IsUpdateTypeAllowed(AppUpdateOptions.ImmediateAppUpdateOptions());
         bool flexibleAllowed = appUpdateInfo.IsUpdateTypeAllowed(AppUpdateOptions.FlexibleAppUpdateOptions());
-        bool shouldUseImmediate = immediateAllowed && (preferImmediateUpdate || !flexibleAllowed);
+        bool shouldUseImmediate = immediateAllowed && (ShouldPreferImmediateUpdate() || !flexibleAllowed);
 
-        if (!shouldUseImmediate && !ignoreCooldown && !ShouldPromptOptionalUpdate(appUpdateInfo.AvailableVersionCode.ToString()))
+        if (!shouldUseImmediate && !ignoreCooldown && !ShouldPromptOptionalUpdate(availableVersionCode))
         {
             Debug.Log("[InAppUpdateManager] Esnek update promptu cooldown nedeniyle ertelendi.");
             _isChecking = false;
@@ -123,9 +133,10 @@ public class InAppUpdateManager : MonoBehaviour
             yield break;
         }
 
-        MarkPrompted(appUpdateInfo.AvailableVersionCode.ToString());
+        MarkPrompted(availableVersionCode);
         Debug.Log($"[InAppUpdateManager] Update akisi baslatildi. Tip={(shouldUseImmediate ? "Immediate" : "Flexible")}");
 #else
+        PublishUpdateAvailability(false, string.Empty);
         Debug.Log("[InAppUpdateManager] Play Store in-app update sadece Android build'de aktif.");
         yield return null;
 #endif
@@ -148,11 +159,23 @@ public class InAppUpdateManager : MonoBehaviour
         return now - lastPrompt >= cooldownSeconds;
     }
 
+    private bool ShouldPreferImmediateUpdate()
+    {
+        return preferImmediateUpdate;
+    }
+
     private void MarkPrompted(string latestVersion)
     {
         long now = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         PlayerPrefs.SetString(SettingsKeys.UpdateLastPromptedVersion, latestVersion ?? string.Empty);
         PlayerPrefs.SetString(SettingsKeys.UpdateLastPromptUnixSeconds, now.ToString());
         PlayerPrefs.Save();
+    }
+
+    private void PublishUpdateAvailability(bool isAvailable, string availableStoreVersion)
+    {
+        _isUpdateAvailable = isAvailable;
+        _availableStoreVersion = availableStoreVersion ?? string.Empty;
+        OnUpdateAvailabilityEvaluated?.Invoke(_isUpdateAvailable, _availableStoreVersion);
     }
 }

@@ -12,9 +12,18 @@ namespace BlockPuzzle.UnityAdapter.Social.UI
         {
             if (LeaderboardManager.Instance != null)
             {
-                float percentile = LeaderboardManager.Instance.GetPlayerPercentile(finalScore, totalPlayers);
-                percentileText.text = $"You beat {percentile:F1}% of the players this week!";
+                _ = SetupSummaryAsync(finalScore, totalPlayers);
             }
+        }
+
+        private async System.Threading.Tasks.Task SetupSummaryAsync(int finalScore, int totalPlayers)
+        {
+            float percentile = await LeaderboardManager.Instance.GetWeeklyPercentileAsync(finalScore);
+            if (percentile <= 0f && totalPlayers > 0)
+                percentile = LeaderboardManager.Instance.GetPlayerPercentile(finalScore, totalPlayers);
+
+            if (percentileText != null)
+                percentileText.text = $"You beat {percentile:F1}% of the players this week!";
         }
 
         public void OnShareButtonClicked(int score)

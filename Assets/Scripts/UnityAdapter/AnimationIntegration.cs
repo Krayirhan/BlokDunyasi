@@ -154,6 +154,7 @@ namespace BlockPuzzle.UnityAdapter
             {
                 // Normal placement feedback - shake
                 PlayPlacementFeedback();
+                TriggerHaptic(10L);
             }
         }
 
@@ -182,7 +183,10 @@ namespace BlockPuzzle.UnityAdapter
         private void HandleGameOver(int finalScore)
         {
             GameLogger.Log($"[AnimationIntegration] Game over with final score: {finalScore}");
-            PlayBoardGameOverBreakSequence();
+            // GameOverView owns the board-wide destruction timeline so it can
+            // keep the real block visuals visible until each cell is captured.
+            // Do not clear board cells here; doing so makes the later effect
+            // appear to explode empty placeholders.
             PlayTrayGameOverBreakSequence();
             // Oyun sonu animasyonları eklenebilir
         }
@@ -768,7 +772,7 @@ namespace BlockPuzzle.UnityAdapter
             {
                 foreach (var pos in clearedPositions)
                 {
-                    PlayBlockBreakEffectAtCell(pos.X, pos.Y, comboCount);
+                    PlayBlockBreakEffectAtCell(pos.X, pos.Y, comboCount + linesCleared);
                 }
             }
 
@@ -789,6 +793,8 @@ namespace BlockPuzzle.UnityAdapter
             {
                 VFXEmitter.Instance.TriggerSlowMoLineClear();
             }
+
+            TriggerHaptic(Mathf.Clamp(12 + (linesCleared * 8), 12, 40));
 
             // 5. Line clear animation sequence
             var clearedLines = new List<int>();
@@ -827,6 +833,33 @@ namespace BlockPuzzle.UnityAdapter
                 return;
 
 #if UNITY_ANDROID || UNITY_IOS
+            TriggerHaptic(Mathf.Clamp(18 + (comboValue * 3), 18, 60));
+#endif
+        }
+
+        private static void TriggerHaptic(long durationMilliseconds)
+        {
+            if (PlayerPrefs.GetInt(VibrationPreferenceKey, 1) != 1)
+                return;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+                using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                using var vibrator = activity.Call<AndroidJavaObject>("getSystemService", "vibrator");
+                using var vibrationEffect = new AndroidJavaClass("android.os.VibrationEffect");
+                using var effect = vibrationEffect.CallStatic<AndroidJavaObject>(
+                    "createOneShot",
+                    durationMilliseconds,
+                    vibrationEffect.GetStatic<int>("DEFAULT_AMPLITUDE"));
+                vibrator.Call("vibrate", effect);
+            }
+            catch (System.Exception)
+            {
+                Handheld.Vibrate();
+            }
+#elif UNITY_IOS
             Handheld.Vibrate();
 #endif
         }
@@ -857,7 +890,7 @@ namespace BlockPuzzle.UnityAdapter
             }
 
             Vector3 worldPosition = cellTransform.position;
-            int spectacleCombo = Mathf.Max(comboCount, 4);
+            int spectacleCombo = Mathf.Max(comboCount, 3 + comboCount);
 
             if (VFXEmitter.Instance != null)
             {

@@ -7,15 +7,55 @@ namespace BlockPuzzle.UnityAdapter.UI.Localization
     {
         private const string KoreanTmpFontResourcePath = "TMP/MalgunGothic_DynamicSDF";
         private const string KoreanLegacyFontResourcePath = "TMP/malgun";
+        private const string PrimaryLatinTmpFontResourcePath = "TMP/GameFont SDF";
+        private const string LatinLegacyFontResourcePath = "TMP/GameFont";
 
         private static TMP_FontAsset _koreanTmpFont;
         private static Font _koreanLegacyFont;
+        private static TMP_FontAsset _latinTmpFont;
+        private static Font _latinLegacyFont;
         private static bool _fallbackRegistered;
 
         public static void ApplyForLanguage(LanguageManager.Language language)
         {
             if (language == LanguageManager.Language.Korean)
                 EnsureKoreanFallbackRegistered();
+        }
+
+        public static TMP_FontAsset GetDefaultLatinTmpFont()
+        {
+            if (_latinTmpFont == null)
+            {
+                _latinTmpFont = Resources.Load<TMP_FontAsset>(PrimaryLatinTmpFontResourcePath);
+
+                if (_latinTmpFont != null && !IsValidTmpFont(_latinTmpFont))
+                {
+                    _latinTmpFont = null;
+                }
+
+                if (_latinTmpFont == null)
+                {
+                    Font legacyFont = Resources.Load<Font>(LatinLegacyFontResourcePath);
+
+                    if (legacyFont != null)
+                    {
+                        _latinTmpFont = TMP_FontAsset.CreateFontAsset(legacyFont);
+                        if (_latinTmpFont != null)
+                        {
+                            _latinTmpFont.name = "GameFont_RuntimeSDF";
+                            EnsureFallback(_latinTmpFont);
+                            Debug.Log("[LocalizedFontUtility] Created GameFont TMP font at runtime from GameFont.ttf");
+                        }
+                    }
+                }
+            }
+
+            if (_latinTmpFont != null)
+            {
+                EnsureFallback(_latinTmpFont);
+            }
+
+            return _latinTmpFont;
         }
 
         public static TMP_FontAsset ResolveTmpFont(LanguageManager.Language language, TMP_FontAsset fallback)
@@ -26,6 +66,13 @@ namespace BlockPuzzle.UnityAdapter.UI.Localization
                 if (koreanFont != null)
                     return koreanFont;
             }
+
+            if (fallback != null && fallback != TMP_Settings.defaultFontAsset)
+                return fallback;
+
+            TMP_FontAsset latinFont = GetDefaultLatinTmpFont();
+            if (latinFont != null)
+                return latinFont;
 
             return fallback != null ? fallback : TMP_Settings.defaultFontAsset;
         }

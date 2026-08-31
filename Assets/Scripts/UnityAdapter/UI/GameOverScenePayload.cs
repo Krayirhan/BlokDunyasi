@@ -61,6 +61,9 @@ namespace BlockPuzzle.UnityAdapter.UI
         }
     }
 
+    /// <summary>
+    /// UnityAdapter tarafindaki continue UI ile varsayilan assembly'deki AdMob provider'i baglar.
+    /// </summary>
     public static class RewardedAdBridge
     {
         private static Func<bool> _isReady;
@@ -79,34 +82,12 @@ namespace BlockPuzzle.UnityAdapter.UI
             _show = show;
         }
 
-        public static bool IsReady()
-        {
-            return _isReady != null && _isReady();
-        }
-
-        public static void Show()
-        {
-            _show?.Invoke();
-        }
-
-        public static void NotifyLoaded()
-        {
-            RewardedAdLoaded?.Invoke();
-        }
-
-        public static void NotifyFailedToLoad(string errorMessage)
-        {
-            RewardedAdFailedToLoad?.Invoke(errorMessage);
-        }
-
-        public static void NotifyUserEarned()
-        {
-            RewardedUserEarned?.Invoke();
-        }
-
-        public static void NotifyClosed()
-        {
-            RewardedAdClosed?.Invoke();
-        }
+        public static bool IsReady() => _isReady != null && _isReady();
+        public static void Show() => _show?.Invoke();
+        public static void NotifyLoaded() => RewardedAdLoaded?.Invoke();
+        public static void NotifyFailedToLoad(string errorMessage) => RewardedAdFailedToLoad?.Invoke(errorMessage);
+        public static void NotifyUserEarned() => RewardedUserEarned?.Invoke();
+        public static void NotifyClosed() => RewardedAdClosed?.Invoke();
     }
+
 }

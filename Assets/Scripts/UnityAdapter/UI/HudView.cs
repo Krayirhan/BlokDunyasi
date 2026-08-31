@@ -412,8 +412,28 @@ namespace BlockPuzzle.UnityAdapter.UI
 
         private void SetupThemeTestButton()
         {
-            SetThemeTestButtonVisibility(false);
-            return;
+            if (!enableThemeTestButton)
+            {
+                SetThemeTestButtonVisibility(false);
+                return;
+            }
+
+            if (themeTestButton == null)
+                themeTestButton = FindThemeTestButtonInChildren();
+
+            if (themeTestButton == null)
+                themeTestButton = CreateThemeTestButton();
+
+            if (themeTestButton == null)
+            {
+                SetThemeTestButtonVisibility(false);
+                Debug.LogWarning("[HudView] Theme button could not be created or found.");
+                return;
+            }
+
+            themeTestButton.onClick.RemoveListener(HandleThemeTestButtonClicked);
+            themeTestButton.onClick.AddListener(HandleThemeTestButtonClicked);
+            SetThemeTestButtonVisibility(true);
         }
 
         private Button FindThemeTestButtonInChildren()
@@ -486,20 +506,28 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (!enableThemeTestButton)
                 return;
 
-            int nextThemeId = (UISettingsProfile.GetThemeId() + 1) % 3;
-            UISettingsProfile.SetThemeId(nextThemeId);
-            UISettingsProfile.SetLastAutomaticThemeId(nextThemeId);
+            // The gameplay theme system contains nine themes. Keep the legacy
+            // HUD button on the same cycle so it cannot get stuck on themes 1-3.
+            int currentThemeId = UISettingsProfile.GetThemeId();
+            int nextThemeId = currentThemeId >= UISettingsProfile.ThemeClassic &&
+                              currentThemeId <= UISettingsProfile.ThemeWood
+                ? (currentThemeId + 1) % 4
+                : UISettingsProfile.ThemeClassic;
 
             if (_gameSceneThemeController == null)
                 _gameSceneThemeController = GameSceneThemeController.GetOrCreateRuntimeController();
 
-            _gameSceneThemeController?.ApplyThemeById(nextThemeId);
+            if (_gameSceneThemeController != null)
+                _gameSceneThemeController.ApplyManualThemeById(nextThemeId);
+            else
+                UISettingsProfile.SetThemeId(nextThemeId);
 
             string themeName = nextThemeId switch
             {
-                UISettingsProfile.ThemeClassic => "Theme 1",
-                UISettingsProfile.ThemeNight => "Theme 2",
-                UISettingsProfile.ThemeVivid => "Patchwork Fabric",
+                UISettingsProfile.ThemeClassic => "Klasik",
+                UISettingsProfile.ThemeNight => "Gece",
+                UISettingsProfile.ThemeVivid => "Doğa",
+                UISettingsProfile.ThemeWood => "Ahşap",
                 _ => "Theme"
             };
 

@@ -71,7 +71,7 @@ namespace BlockPuzzle.UnityAdapter.Boot
                 await PersistStatisticsAsync(force: true);
 
                 if (finalScore >= currentHighScore && BlockPuzzle.Core.Social.GooglePlayGamesManager.Instance != null)
-                    BlockPuzzle.Core.Social.GooglePlayGamesManager.Instance.PostScore(stats.HighScore);
+                    BlockPuzzle.Core.Social.GooglePlayGamesManager.Instance.PostScore(stats.HighScore, gameState?.RescueCount ?? 0, gameState?.Mode.ToString() ?? "Classic");
             }
             catch (Exception ex)
             {

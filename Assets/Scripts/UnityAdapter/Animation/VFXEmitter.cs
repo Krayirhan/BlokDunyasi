@@ -333,22 +333,18 @@ namespace BlockPuzzle.UnityAdapter.Animation
                     ApplyParticleSortingOrder(sr, -2, 0);
                 }
 
-                // Yavaşça fade out
+                // Yavaşça fade out ve particle pool'una geri dön.
                 var cg = dust.GetComponent<CanvasGroup>();
-                if (cg != null)
-                {
-                    cg.alpha = 1f;
-                }
+                if (cg == null) cg = dust.AddComponent<CanvasGroup>();
+                cg.alpha = 1f;
 
-                // Üst tarafa doğru yavaşça çık
-                Vector3 targetPos = spawnPos + Vector3.up * (cellSize * 3);
-                AnimationController.Instance.PlayFloatingTextAnim(
+                _activeParticles.Add(dust);
+                StartCoroutine(PlacementDustRoutine(
                     dust,
+                    cg,
                     spawnPos,
-                    targetPos,
-                    vfxPreset.placementDustLifetime,
-                    () => ReturnPooledParticle(dust)
-                );
+                    spawnPos + Vector3.up * (cellSize * 0.7f),
+                    vfxPreset.placementDustLifetime));
             }
         }
 
@@ -996,6 +992,40 @@ namespace BlockPuzzle.UnityAdapter.Animation
 
                 if (canvasGroup != null)
                     canvasGroup.alpha = Mathf.Lerp(1f, 0f, eased);
+
+                yield return null;
+            }
+
+            if (particle != null && _activeParticles.Contains(particle))
+            {
+                ReturnPooledParticle(particle);
+                _activeParticles.Remove(particle);
+            }
+        }
+
+        private System.Collections.IEnumerator PlacementDustRoutine(
+            GameObject particle,
+            CanvasGroup canvasGroup,
+            Vector3 startPos,
+            Vector3 endPos,
+            float lifetime)
+        {
+            if (particle == null)
+                yield break;
+
+            Vector3 originalScale = particle.transform.localScale;
+            float elapsed = 0f;
+
+            while (elapsed < lifetime && particle != null && particle.activeInHierarchy)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / Mathf.Max(0.01f, lifetime));
+                float eased = 1f - ((1f - t) * (1f - t));
+                particle.transform.position = Vector3.Lerp(startPos, endPos, eased);
+                particle.transform.localScale = Vector3.Lerp(originalScale, Vector3.zero, eased);
+
+                if (canvasGroup != null)
+                    canvasGroup.alpha = 1f - eased;
 
                 yield return null;
             }

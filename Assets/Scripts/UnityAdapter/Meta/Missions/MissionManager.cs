@@ -13,14 +13,28 @@ namespace BlockPuzzle.Core.Meta.Missions
         public MissionProgress(string id)
         {
             missionId = id;
-            currentAmount = 0;
-            isClaimed = false;
+            currentAmount = PlayerPrefs.GetInt($"mission_progress_{id}", 0);
+            isClaimed = PlayerPrefs.GetInt($"mission_claimed_{id}", 0) == 1;
         }
     }
 
     public class MissionManager : MonoBehaviour
     {
-        public static MissionManager Instance { get; private set; }
+        private static MissionManager _instance;
+
+        public static MissionManager Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    var managerObject = new GameObject("MissionManager");
+                    _instance = managerObject.AddComponent<MissionManager>();
+                }
+
+                return _instance;
+            }
+        }
 
         public List<MissionDefinition> activeMissions = new List<MissionDefinition>();
         private Dictionary<string, MissionProgress> missionProgresses = new Dictionary<string, MissionProgress>();
@@ -30,10 +44,11 @@ namespace BlockPuzzle.Core.Meta.Missions
 
         private void Awake()
         {
-            if (Instance == null)
+            if (_instance == null)
             {
-                Instance = this;
+                _instance = this;
                 DontDestroyOnLoad(gameObject);
+                InitializeFromResources();
             }
             else
             {
@@ -43,14 +58,23 @@ namespace BlockPuzzle.Core.Meta.Missions
 
         public void InitializeMissions(List<MissionDefinition> missions)
         {
-            activeMissions = missions;
+            activeMissions = missions ?? new List<MissionDefinition>();
             foreach (var mission in activeMissions)
             {
+                if (mission == null || string.IsNullOrWhiteSpace(mission.id))
+                    continue;
+
                 if (!missionProgresses.ContainsKey(mission.id))
                 {
                     missionProgresses[mission.id] = new MissionProgress(mission.id);
                 }
             }
+        }
+
+        private void InitializeFromResources()
+        {
+            var missions = new List<MissionDefinition>(Resources.LoadAll<MissionDefinition>(string.Empty));
+            InitializeMissions(missions);
         }
 
         public void ReportProgress(MissionGoalType goalType, int amount)
@@ -68,6 +92,8 @@ namespace BlockPuzzle.Core.Meta.Missions
                         progress.currentAmount = mission.targetAmount;
                         OnMissionCompleted?.Invoke(mission);
                     }
+
+                    PlayerPrefs.SetInt($"mission_progress_{mission.id}", progress.currentAmount);
                     OnMissionProgressUpdated?.Invoke(progress);
                 }
             }
@@ -81,6 +107,8 @@ namespace BlockPuzzle.Core.Meta.Missions
                 if (missionDef != null && progress.currentAmount >= missionDef.targetAmount && !progress.isClaimed)
                 {
                     progress.isClaimed = true;
+                    PlayerPrefs.SetInt($"mission_claimed_{missionId}", 1);
+                    PlayerPrefs.Save();
                     RewardInventory.Instance.AddReward(missionDef.rewardId, missionDef.rewardAmount);
                     return true;
                 }

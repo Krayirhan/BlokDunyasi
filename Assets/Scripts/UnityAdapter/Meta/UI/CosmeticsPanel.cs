@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using System.Collections.Generic;
 using BlockPuzzle.Core.Meta.Cosmetics;
 using BlockPuzzle.Core.Meta;
+using BlockPuzzle.UnityAdapter.UI;
 
 namespace BlockPuzzle.UnityAdapter.Meta.UI
 {
@@ -74,7 +75,7 @@ namespace BlockPuzzle.UnityAdapter.Meta.UI
                 if (RewardInventory.Instance != null && RewardInventory.Instance.ConsumeReward(theme.currencyId, theme.costAmount))
                 {
                     Debug.Log($"Purchased Theme: {theme.themeName}");
-                    // TODO: Dispatch Event to switch current game theme
+                    EquipTheme(theme);
                 }
                 else
                 {
@@ -84,8 +85,45 @@ namespace BlockPuzzle.UnityAdapter.Meta.UI
             else
             {
                 Debug.Log($"Equipped Theme: {theme.themeName}");
-                // TODO: Dispatch Event to switch current game theme
+                EquipTheme(theme);
             }
+        }
+
+        private static void EquipTheme(CosmeticTheme theme)
+        {
+            if (theme == null)
+                return;
+
+            if (!TryResolveThemeId(theme.themeId, theme.themeName, out int themeId))
+            {
+                Debug.LogWarning($"[CosmeticsPanel] Could not resolve theme ID for '{theme.themeName}'.");
+                return;
+            }
+
+            // The gameplay scene owns the visual controller. Persist the choice
+            // here so that controller applies the complete scene theme on load.
+            UISettingsProfile.SetThemeId(themeId);
+            UISettingsProfile.SetLastAutomaticThemeId(themeId);
+            Debug.Log($"[CosmeticsPanel] Equipped theme {themeId}: {theme.themeName}");
+        }
+
+        private static bool TryResolveThemeId(string rawId, string themeName, out int themeId)
+        {
+            if (int.TryParse(rawId, out themeId))
+            {
+                // Accept both the internal 0-based IDs and human-facing 1-based IDs.
+                if (themeId >= 1 && themeId <= 4 && !rawId.TrimStart().StartsWith("0"))
+                    themeId--;
+                return themeId >= UISettingsProfile.ThemeClassic && themeId <= UISettingsProfile.ThemeWood;
+            }
+
+            string value = $"{rawId} {themeName}".ToLowerInvariant();
+            if (value.Contains("classic") || value.Contains("theme 1")) themeId = UISettingsProfile.ThemeClassic;
+            else if (value.Contains("neon") || value.Contains("teal") || value.Contains("night") || value.Contains("theme 2")) themeId = UISettingsProfile.ThemeNight;
+            else if (value.Contains("zen") || value.Contains("doğa") || value.Contains("doga") || value.Contains("theme 3")) themeId = UISettingsProfile.ThemeVivid;
+            else if (value.Contains("wood") || value.Contains("ahşap") || value.Contains("ahsap") || value.Contains("theme 4")) themeId = UISettingsProfile.ThemeWood;
+            else { themeId = UISettingsProfile.ThemeClassic; return false; }
+            return true;
         }
     }
 }

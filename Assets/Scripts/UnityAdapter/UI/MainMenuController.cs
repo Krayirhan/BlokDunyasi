@@ -124,8 +124,76 @@ namespace BlockPuzzle.UnityAdapter.UI
         private RectTransform _secondaryButtonsRow;
         private RectTransform _authSlot;
 
-        private void Awake()
+        public static readonly Color MainMenuSolidBgColor = new Color(0.0196f, 0.1176f, 0.2980f, 1f); // #051E4C Dark Royal Navy
+
+        private void SetupMainMenuBackground()
         {
+            var cam = Camera.main ?? FindFirstObjectByType<Camera>();
+            if (cam != null)
+            {
+                cam.clearFlags = CameraClearFlags.SolidColor;
+                cam.backgroundColor = MainMenuSolidBgColor;
+            }
+
+            var canvas = FindFirstObjectByType<Canvas>();
+            if (canvas != null)
+            {
+                var bgTransform = canvas.transform.Find("MainMenuBackground");
+                Image bgImage = null;
+                if (bgTransform == null)
+                {
+                    var bgGo = new GameObject("MainMenuBackground", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                    bgGo.transform.SetParent(canvas.transform, false);
+                    bgGo.transform.SetAsFirstSibling();
+                    bgTransform = bgGo.transform;
+                    bgImage = bgGo.GetComponent<Image>();
+                }
+                else
+                {
+                    bgImage = bgTransform.GetComponent<Image>();
+                    bgTransform.SetAsFirstSibling();
+                }
+
+                if (bgImage != null)
+                {
+                    var rt = bgImage.rectTransform;
+                    rt.anchorMin = Vector2.zero;
+                    rt.anchorMax = Vector2.one;
+                    rt.offsetMin = Vector2.zero;
+                    rt.offsetMax = Vector2.zero;
+                    rt.pivot = new Vector2(0.5f, 0.5f);
+
+                    Sprite bgSprite = null;
+#if UNITY_EDITOR
+                    bgSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Images/mainmenu_background.png");
+#endif
+                    if (bgSprite == null)
+                        bgSprite = Resources.Load<Sprite>("mainmenu_background");
+
+                    if (bgSprite != null)
+                    {
+                        bgImage.sprite = bgSprite;
+                        bgImage.type = Image.Type.Simple;
+                        bgImage.color = Color.white;
+                    }
+                    else
+                    {
+                        bgImage.sprite = null;
+                        bgImage.color = MainMenuSolidBgColor;
+                    }
+                    bgImage.raycastTarget = false;
+                }
+            }
+        }
+
+        void Start()
+        {
+            SetupMainMenuBackground();
+        }
+
+        void Awake()
+        {
+            SetupMainMenuBackground();
             if (_activeInstance != null && _activeInstance != this)
             {
                 if (verboseLogs)
@@ -210,6 +278,12 @@ namespace BlockPuzzle.UnityAdapter.UI
 
         private void Update()
         {
+            var activeCam = Camera.main;
+            if (activeCam != null && activeCam.backgroundColor != MainMenuSolidBgColor)
+            {
+                activeCam.clearFlags = CameraClearFlags.SolidColor;
+                activeCam.backgroundColor = MainMenuSolidBgColor;
+            }
             if (!applyResponsiveLayout)
                 return;
 

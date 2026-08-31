@@ -28,7 +28,7 @@ namespace BlockPuzzle.UnityAdapter.UI.Localization
                 if (_instance == null)
                 {
                     _instance = FindFirstObjectByType<LanguageManager>(FindObjectsInactive.Include);
-                    if (_instance == null)
+                    if (_instance == null && Application.isPlaying)
                     {
                         GameObject go = new GameObject("[LanguageManager]");
                         _instance = go.AddComponent<LanguageManager>();
@@ -62,17 +62,6 @@ namespace BlockPuzzle.UnityAdapter.UI.Localization
 
         private void Awake()
         {
-            var allManagers = FindObjectsByType<LanguageManager>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            for (int i = 0; i < allManagers.Length; i++)
-            {
-                var candidate = allManagers[i];
-                if (candidate != null && candidate != this)
-                {
-                    _instance = this;
-                    Destroy(candidate.gameObject);
-                }
-            }
-
             if (_instance != null && _instance != this)
             {
                 Destroy(gameObject);
@@ -80,7 +69,8 @@ namespace BlockPuzzle.UnityAdapter.UI.Localization
             }
 
             _instance = this;
-            DontDestroyOnLoad(gameObject);
+            if (Application.isPlaying)
+                DontDestroyOnLoad(gameObject);
             LoadLanguagePreference();
             SceneManager.sceneLoaded -= HandleSceneLoaded;
             SceneManager.sceneLoaded += HandleSceneLoaded;

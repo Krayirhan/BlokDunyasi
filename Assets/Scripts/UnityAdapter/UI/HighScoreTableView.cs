@@ -1,10 +1,12 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using BlockPuzzle.Core.Common;
 using BlockPuzzle.Core.Persistence;
+using BlockPuzzle.UnityAdapter;
 using BlockPuzzle.UnityAdapter.Social;
 using Firebase;
 using Firebase.Firestore;
@@ -29,8 +31,9 @@ namespace BlockPuzzle.UnityAdapter.UI
     public class HighScoreTableView : MonoBehaviour, ILanguageListener
     {
         private const string PublicLeaderboardCollection = "leaderboard_public";
+        private const string UsersCollection = "users";
         private const string RichRootName = "RichScoresRoot";
-        private const string MarkerName = "ScoresPodiumV2";
+        private const string MarkerName = "ScoresPodiumV11";
         private static readonly CultureInfo ScoreCulture = CultureInfo.GetCultureInfo("tr-TR");
 
         [Header("Legacy")]
@@ -41,16 +44,21 @@ namespace BlockPuzzle.UnityAdapter.UI
         [SerializeField] private float singleEntryAnchoredX;
 
         [Header("Remote Leaderboard")]
-        [SerializeField] private bool includeCurrentPlayerWhenMissing = true;
         [SerializeField] private string loadingText = "Yukleniyor...";
         [SerializeField] private string currentPlayerLabel = "Sen";
         [SerializeField] private Color currentPlayerColor = new Color(1f, 0.86f, 0.32f, 1f);
 
+        private const float RetryDelay = 3f;
+        private const int MaxRetries = 5;
+
         private readonly List<LeaderboardRow> _cachedRows = new List<LeaderboardRow>();
         private readonly List<ListRowUi> _listRows = new List<ListRowUi>();
+        private readonly List<Coroutine> _retryCoroutines = new List<Coroutine>();
         private BestScoreStore _bestScoreStore;
         private bool _refreshInProgress;
         private bool _listenersBound;
+        private Coroutine _bootstrapCoroutine;
+        private int _retryCount;
         private RectTransform _rectTransform;
         private RectTransform _richRoot;
         private Button _homeButton;
@@ -93,13 +101,11 @@ namespace BlockPuzzle.UnityAdapter.UI
 
         private void Awake()
         {
-            EnsureStores();
             EnsureHierarchy();
         }
 
         private void OnEnable()
         {
-            EnsureStores();
             EnsureHierarchy();
             BindHomeButton();
 
@@ -108,12 +114,30 @@ namespace BlockPuzzle.UnityAdapter.UI
 
             if (Application.isPlaying)
             {
-                Refresh();
+                _retryCount = 0;
+                _refreshInProgress = false;
+
+                // Subscribe synchronously so we never miss an event that fires before the coroutine runs
+                SubscribeFirebaseEvents();
+
+                FirebaseManager firebase = FirebaseManager.Instance;
+                if (firebase != null && firebase.IsInitialized)
+                {
+                    // Firebase already ready — refresh immediately, no bootstrap needed
+                    Refresh();
+                }
+                else if (firebase == null)
+                {
+                    // FirebaseManager not in scene yet — poll for it via coroutine
+                    StartBootstrap();
+                }
+                // else: firebase exists but initializing — HandleFirebaseInitialized will call Refresh()
+
                 RefreshLocalizedTexts();
             }
             else
             {
-                ApplyRows(BuildPreviewRows());
+                ApplyRows(new List<LeaderboardRow>());
                 RefreshLocalizedTexts();
             }
         }
@@ -121,6 +145,10 @@ namespace BlockPuzzle.UnityAdapter.UI
         private void OnDisable()
         {
             _listenersBound = false;
+            _refreshInProgress = false;
+            StopBootstrap();
+            StopAllRetryCoroutines();
+            UnsubscribeFirebaseEvents();
             if (LanguageManager.Instance != null)
                 LanguageManager.Instance.Unsubscribe(this);
         }
@@ -129,9 +157,103 @@ namespace BlockPuzzle.UnityAdapter.UI
         {
             RefreshLocalizedTexts();
             if (Application.isPlaying)
-            {
                 Refresh();
+        }
+
+        // ── Bootstrap ────────────────────────────────────────────────────
+
+        private void StartBootstrap()
+        {
+            StopBootstrap();
+            _bootstrapCoroutine = StartCoroutine(BootstrapCoroutine());
+        }
+
+        private void StopBootstrap()
+        {
+            if (_bootstrapCoroutine != null)
+            {
+                StopCoroutine(_bootstrapCoroutine);
+                _bootstrapCoroutine = null;
             }
+        }
+
+        private IEnumerator BootstrapCoroutine()
+        {
+            // Only called when FirebaseManager.Instance was null at OnEnable time.
+            // Poll until the singleton appears (max 10s).
+            float waited = 0f;
+            while (FirebaseManager.Instance == null && waited < 10f)
+            {
+                yield return new WaitForSeconds(0.1f);
+                waited += 0.1f;
+            }
+
+            // Subscribe now that the instance may be available
+            SubscribeFirebaseEvents();
+
+            FirebaseManager firebase = FirebaseManager.Instance;
+            if (firebase == null)
+            {
+                Debug.LogWarning("[HighScoreTableView] FirebaseManager not found after 10s — scheduling retry.");
+                _bootstrapCoroutine = null;
+                // Schedule a retry: Refresh() returns early if still not ready, but keeps retrying
+                if (_retryCount < MaxRetries)
+                {
+                    _retryCount++;
+                    ScheduleRetry();
+                }
+                yield break;
+            }
+
+            if (firebase.IsInitialized)
+                Refresh();
+            // else: HandleFirebaseInitialized will fire once SDK is ready
+
+            _bootstrapCoroutine = null;
+        }
+
+        // ── Firebase event subscriptions ─────────────────────────────────
+
+        private void SubscribeFirebaseEvents()
+        {
+            if (!Application.isPlaying)
+                return;
+
+            FirebaseManager firebase = FirebaseManager.Instance;
+            if (firebase == null)
+                return;
+
+            firebase.OnFirebaseInitialized -= HandleFirebaseInitialized;
+            firebase.OnFirebaseInitialized += HandleFirebaseInitialized;
+            firebase.OnRemoteScoreChanged -= HandleRemoteScoreChanged;
+            firebase.OnRemoteScoreChanged += HandleRemoteScoreChanged;
+            firebase.OnUserLogin -= HandleUserLoginChanged;
+            firebase.OnUserLogin += HandleUserLoginChanged;
+        }
+
+        private void UnsubscribeFirebaseEvents()
+        {
+            FirebaseManager firebase = FirebaseManager.Instance;
+            if (firebase == null)
+                return;
+
+            firebase.OnFirebaseInitialized -= HandleFirebaseInitialized;
+            firebase.OnRemoteScoreChanged -= HandleRemoteScoreChanged;
+            firebase.OnUserLogin -= HandleUserLoginChanged;
+        }
+
+        private void HandleFirebaseInitialized()
+        {
+            _retryCount = 0;
+            Refresh();
+        }
+
+        private void HandleRemoteScoreChanged(int _) => Refresh();
+
+        private void HandleUserLoginChanged(Firebase.Auth.FirebaseUser _)
+        {
+            _retryCount = 0;
+            Refresh();
         }
 
         private void RefreshLocalizedTexts()
@@ -212,46 +334,100 @@ namespace BlockPuzzle.UnityAdapter.UI
                 return;
 
             EnsureHierarchy();
-            ApplyRows(BuildPreviewRows());
+            ApplyRows(new List<LeaderboardRow>());
         }
 #endif
 
         public async void Refresh()
         {
-            EnsureHierarchy();
+            // Refresh is async and can outlive a scene change. Unity overloads
+            // == for destroyed objects, so this guard must be before any member access.
+            if (this == null || !isActiveAndEnabled)
+                return;
 
             if (_refreshInProgress)
                 return;
 
             _refreshInProgress = true;
-            SetLoadingState();
 
             try
             {
+                EnsureHierarchy();
+                SetLoadingState();
+
                 List<LeaderboardRow> rows = await BuildLeaderboardRowsAsync();
+
+                // The scene may have been unloaded while Firestore was awaiting.
+                if (this == null || !isActiveAndEnabled)
+                    return;
+
                 _cachedRows.Clear();
                 _cachedRows.AddRange(rows);
                 ApplyRows(_cachedRows);
+
+                // If we got no remote rows and retries remain, schedule another attempt.
+                // This handles transient network errors that are caught silently inside the fetch.
+                bool hasRemoteRows = rows.Any(r => !r.IsCurrentPlayer);
+                if (!hasRemoteRows && _retryCount < MaxRetries)
+                {
+                    _retryCount++;
+                    ScheduleRetry();
+                }
+                else if (hasRemoteRows)
+                {
+                    _retryCount = 0;
+                }
             }
             catch (Exception ex)
             {
+                if (this == null || !isActiveAndEnabled)
+                    return;
+
                 if (IsPermissionDenied(ex))
-                    Debug.Log("[HighScoreTableView] Firestore leaderboard read is blocked by rules. Showing local fallback.");
+                    Debug.Log("[HighScoreTableView] Firestore leaderboard read is blocked by rules.");
                 else
                     Debug.LogWarning($"[HighScoreTableView] Leaderboard refresh failed: {ex.Message}");
 
-                ApplyRows(BuildLocalFallbackRows());
+                ApplyRows(new List<LeaderboardRow>());
+
+                if (_retryCount < MaxRetries)
+                {
+                    _retryCount++;
+                    ScheduleRetry();
+                }
             }
             finally
             {
-                _refreshInProgress = false;
+                if (this != null)
+                    _refreshInProgress = false;
             }
         }
 
-        private void EnsureStores()
+        private void ScheduleRetry()
         {
-            if (_bestScoreStore == null)
-                _bestScoreStore = new BestScoreStore(new PlayerPrefsStorage());
+            if (!Application.isPlaying || !gameObject.activeInHierarchy)
+                return;
+
+            Coroutine c = StartCoroutine(RetryAfterDelay());
+            _retryCoroutines.Add(c);
+        }
+
+        private void StopAllRetryCoroutines()
+        {
+            foreach (Coroutine c in _retryCoroutines)
+            {
+                if (c != null)
+                    StopCoroutine(c);
+            }
+            _retryCoroutines.Clear();
+        }
+
+        private IEnumerator RetryAfterDelay()
+        {
+            yield return new WaitForSeconds(RetryDelay);
+            _retryCoroutines.RemoveAll(c => c == null);
+            if (gameObject.activeInHierarchy)
+                Refresh();
         }
 
         private void EnsureHierarchy()
@@ -262,15 +438,17 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (_rectTransform == null)
                 return;
 
-            _titleFont = Resources.Load<TMP_FontAsset>("TMP/LuckiestGuy-Regular Combo SDF") ?? TMP_Settings.defaultFontAsset;
-            _bodyFont = TMP_Settings.defaultFontAsset != null ? TMP_Settings.defaultFontAsset : _titleFont;
+            _titleFont = Resources.Load<TMP_FontAsset>("TMP/LuckiestGuy-Regular Combo SDF") ?? Localization.LocalizedFontUtility.GetDefaultLatinTmpFont() ?? TMP_Settings.defaultFontAsset;
+            _bodyFont = Localization.LocalizedFontUtility.GetDefaultLatinTmpFont() ?? _titleFont ?? TMP_Settings.defaultFontAsset;
 
-            // SafeAreaFitter currently lives outside the UnityAdapter asmdef, so avoid a hard type reference here.
-            if (GetComponent("SafeAreaFitter") == null)
-                Stretch(_rectTransform);
+            var safeAreaFitter = GetComponent("SafeAreaFitter") as Behaviour;
+            if (safeAreaFitter != null)
+                safeAreaFitter.enabled = false;
+            Stretch(_rectTransform);
             _rectTransform.SetAsLastSibling();
 
             DisableLegacyChildren();
+            ResetCachedUiReferences();
 
             Transform existing = transform.Find(RichRootName);
             if (existing != null && existing.Find(MarkerName) != null)
@@ -294,9 +472,21 @@ namespace BlockPuzzle.UnityAdapter.UI
             }
 
             CacheReferences();
+            EnsureBackdropSprite();
             EnsureHomeButtonLayout();
             BindHomeButton();
             RefreshLocalizedTexts();
+        }
+
+        private void ResetCachedUiReferences()
+        {
+            _richRoot = null;
+            _homeButton = null;
+            _firstSlot = null;
+            _secondSlot = null;
+            _thirdSlot = null;
+            _listRows.Clear();
+            _listenersBound = false;
         }
 
         private void DisableLegacyChildren()
@@ -318,10 +508,10 @@ namespace BlockPuzzle.UnityAdapter.UI
         {
             BuildBackdrop(root);
             RectTransform safeRoot = CreateRect("SafeRoot", root);
-            Stretch(safeRoot, 26f, 26f, 26f, 26f);
+            Stretch(safeRoot, 0f, 0f, 0f, 0f);
 
             RectTransform content = CreateRect("ContentRoot", safeRoot);
-            Stretch(content, 42f, 42f, 24f, 24f);
+            Stretch(content, 24f, 24f, 96f, 40f);
 
             BuildHeader(content);
             BuildPodium(content);
@@ -331,94 +521,259 @@ namespace BlockPuzzle.UnityAdapter.UI
 
         private void BuildBackdrop(RectTransform root)
         {
-            Image baseFill = CreateImage("BaseFill", root, new Color(0.03f, 0.1f, 0.25f, 1f), false, false, 0.04f);
-            Stretch(baseFill.rectTransform);
+            Image baseFill = CreateImage("BaseFill", root, Color.white, false, false, 0f);
+            Stretch(baseFill.rectTransform, -400f, -400f, -600f, -600f);
 
-            Image innerTint = CreateImage("InnerTint", root, new Color(0.02f, 0.16f, 0.43f, 0.92f), false, false, 0.04f);
-            Stretch(innerTint.rectTransform, 12f, 12f, 12f, 12f);
+            // Subtle dark overlay to let podium and text elements pop with clear contrast
+            Image innerTint = CreateImage("InnerTint", root, new Color(0.02f, 0.08f, 0.22f, 0.45f), false, false, 0f);
+            Stretch(innerTint.rectTransform, -400f, -400f, -600f, -600f);
 
-            CreateGlow(root, "TopGlow", new Vector2(0f, 840f), new Vector2(900f, 760f), new Color(0.11f, 0.42f, 0.98f, 0.26f));
-            CreateGlow(root, "BottomGlow", new Vector2(0f, -780f), new Vector2(920f, 640f), new Color(0.13f, 0.18f, 0.52f, 0.34f));
-            CreateGlow(root, "AccentGlowLeft", new Vector2(-300f, 120f), new Vector2(360f, 360f), new Color(0.08f, 0.86f, 1f, 0.12f));
-            CreateGlow(root, "AccentGlowRight", new Vector2(320f, -120f), new Vector2(340f, 340f), new Color(1f, 0.7f, 0.18f, 0.1f));
+            EnsureBackdropSprite();
+        }
 
-            BuildGrid(root);
-            BuildDecorSquare(root, "DecorA", new Vector2(-410f, 790f), 86f, -17f, new Color(0.15f, 0.28f, 0.72f, 0.7f));
-            BuildDecorSquare(root, "DecorB", new Vector2(406f, 708f), 52f, 12f, new Color(0.2f, 0.68f, 0.42f, 0.66f));
-            BuildDecorSquare(root, "DecorC", new Vector2(-420f, 300f), 46f, 18f, new Color(0.47f, 0.24f, 0.82f, 0.58f));
-            BuildDecorSquare(root, "DecorD", new Vector2(430f, 260f), 58f, -13f, new Color(0.66f, 0.54f, 0.16f, 0.54f));
-            BuildDecorSquare(root, "DecorE", new Vector2(-445f, -930f), 34f, 0f, new Color(0.09f, 0.58f, 0.86f, 0.48f));
-            BuildDecorSquare(root, "DecorF", new Vector2(432f, -772f), 32f, 11f, new Color(0.42f, 0.2f, 0.74f, 0.44f));
+        private void EnsureBackdropSprite()
+        {
+            if (_richRoot == null) return;
+            Transform baseFillTransform = _richRoot.Find("BaseFill");
+            if (baseFillTransform != null)
+            {
+                Image img = baseFillTransform.GetComponent<Image>();
+                if (img != null)
+                {
+                    Sprite bgSprite = null;
+#if UNITY_EDITOR
+                    bgSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Images/mainmenu_background.png");
+#endif
+                    if (bgSprite == null)
+                        bgSprite = Resources.Load<Sprite>("mainmenu_background");
+
+                    if (bgSprite != null)
+                    {
+                        img.sprite = bgSprite;
+                        img.type = Image.Type.Simple;
+                        img.color = Color.white;
+                    }
+                }
+            }
+
+            Transform innerTintTransform = _richRoot.Find("InnerTint");
+            if (innerTintTransform != null)
+            {
+                Image tint = innerTintTransform.GetComponent<Image>();
+                if (tint != null)
+                {
+                    tint.color = new Color(0.02f, 0.08f, 0.22f, 0.45f);
+                }
+            }
+        }
+
+        private static Sprite LoadLeaderboardSprite(string spriteName)
+        {
+#if UNITY_EDITOR
+            string assetPath = $"Assets/Images/UI/Leaderboard/{spriteName}.png";
+            var editorAssets = UnityEditor.AssetDatabase.LoadAllAssetsAtPath(assetPath);
+            if (editorAssets != null && editorAssets.Length > 0)
+            {
+                Sprite best = null;
+                float maxArea = 0f;
+                foreach (var obj in editorAssets)
+                {
+                    if (obj is Sprite s)
+                    {
+                        float area = s.rect.width * s.rect.height;
+                        if (area > maxArea)
+                        {
+                            maxArea = area;
+                            best = s;
+                        }
+                    }
+                }
+                if (best != null && maxArea > 2500f)
+                    return best;
+            }
+
+            Texture2D tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+            if (tex != null)
+            {
+                return Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+            }
+#endif
+            Sprite[] resourcesSprites = Resources.LoadAll<Sprite>($"Leaderboard/{spriteName}");
+            if (resourcesSprites != null && resourcesSprites.Length > 0)
+            {
+                Sprite best = null;
+                float maxArea = 0f;
+                foreach (var s in resourcesSprites)
+                {
+                    if (s != null)
+                    {
+                        float area = s.rect.width * s.rect.height;
+                        if (area > maxArea)
+                        {
+                            maxArea = area;
+                            best = s;
+                        }
+                    }
+                }
+                if (best != null && maxArea > 2500f)
+                    return best;
+            }
+
+            Sprite singleSprite = Resources.Load<Sprite>($"Leaderboard/{spriteName}");
+            if (singleSprite != null)
+                return singleSprite;
+
+            Texture2D resTex = Resources.Load<Texture2D>($"Leaderboard/{spriteName}");
+            if (resTex != null)
+            {
+                return Sprite.Create(resTex, new Rect(0f, 0f, resTex.width, resTex.height), new Vector2(0.5f, 0.5f), 100f);
+            }
+
+            return null;
         }
 
         private void BuildHeader(RectTransform parent)
         {
             RectTransform header = CreateRect("Header", parent);
-            SetRect(header, new Vector2(0.5f, 1f), new Vector2(820f, 260f), new Vector2(0f, -76f));
+            SetRect(header, new Vector2(0.5f, 1f), new Vector2(860f, 180f), new Vector2(0f, 0f), new Vector2(0.5f, 1f));
 
-            TextMeshProUGUI trophyText = CreateText("TrophyText", header, "\u2605", _bodyFont, 90f, new Color(1f, 0.78f, 0.16f, 1f), FontStyles.Bold, TextAlignmentOptions.Center);
-            SetRect(trophyText.rectTransform, new Vector2(0.5f, 1f), new Vector2(140f, 90f), new Vector2(0f, -10f));
-            AddShadow(trophyText.gameObject, new Color(0.58f, 0.28f, 0.02f, 0.5f), new Vector2(0f, -5f));
+            var trophySprite = LoadLeaderboardSprite("header_trophy");
+            if (trophySprite != null)
+            {
+                Image trophyImg = CreateImage("TrophyImage", header, Color.white, false, false, 0f);
+                trophyImg.sprite = trophySprite;
+                trophyImg.type = Image.Type.Simple;
+                trophyImg.preserveAspect = true;
+                SetRect(trophyImg.rectTransform, new Vector2(0.5f, 1f), new Vector2(110f, 110f), new Vector2(0f, 0f), new Vector2(0.5f, 1f));
+                AddShadow(trophyImg.gameObject, new Color(0f, 0f, 0f, 0.35f), new Vector2(0f, -4f));
+            }
+            else
+            {
+                TextMeshProUGUI trophyText = CreateText("TrophyText", header, "\u2605", _bodyFont, 80f, new Color(1f, 0.78f, 0.16f, 1f), FontStyles.Bold, TextAlignmentOptions.Center);
+                SetRect(trophyText.rectTransform, new Vector2(0.5f, 1f), new Vector2(110f, 80f), new Vector2(0f, 0f), new Vector2(0.5f, 1f));
+                AddShadow(trophyText.gameObject, new Color(0.58f, 0.28f, 0.02f, 0.5f), new Vector2(0f, -4f));
+            }
 
-            TextMeshProUGUI titleText = CreateText("TitleText", header, "En Yuksek Skorlar", _bodyFont, 54f, Color.white, FontStyles.Bold, TextAlignmentOptions.Center);
+            TextMeshProUGUI titleText = CreateText("TitleText", header, "En Yüksek Skorlar", _titleFont, 44f, Color.white, FontStyles.Bold, TextAlignmentOptions.Center);
             titleText.enableAutoSizing = true;
-            titleText.fontSizeMin = 34f;
-            titleText.fontSizeMax = 56f;
-            SetRect(titleText.rectTransform, new Vector2(0.5f, 1f), new Vector2(820f, 104f), new Vector2(0f, -118f));
-            AddShadow(titleText.gameObject, new Color(0f, 0f, 0f, 0.34f), new Vector2(0f, -4f));
+            titleText.fontSizeMin = 30f;
+            titleText.fontSizeMax = 46f;
+            SetRect(titleText.rectTransform, new Vector2(0.5f, 1f), new Vector2(750f, 50f), new Vector2(0f, -120f), new Vector2(0.5f, 1f));
+            AddShadow(titleText.gameObject, new Color(0f, 0f, 0f, 0.35f), new Vector2(0f, -4f));
         }
 
         private void BuildPodium(RectTransform parent)
         {
             RectTransform podiumRoot = CreateRect("PodiumRoot", parent);
-            SetRect(podiumRoot, new Vector2(0.5f, 0.5f), new Vector2(860f, 640f), new Vector2(0f, 110f));
+            SetRect(podiumRoot, new Vector2(0.5f, 1f), new Vector2(940f, 720f), new Vector2(0f, -190f), new Vector2(0.5f, 1f));
 
-            _secondSlot = BuildPodiumSlot(podiumRoot, "SecondSlot", new Vector2(-250f, -22f), new Vector2(220f, 360f), 2, new Color(0.83f, 0.86f, 0.93f), new Color(0.36f, 0.48f, 0.76f), new Color(0.66f, 0.7f, 0.8f));
-            _firstSlot = BuildPodiumSlot(podiumRoot, "FirstSlot", new Vector2(0f, 54f), new Vector2(250f, 456f), 1, new Color(1f, 0.8f, 0.08f), new Color(0.95f, 0.66f, 0.08f), new Color(1f, 0.86f, 0.28f));
-            _thirdSlot = BuildPodiumSlot(podiumRoot, "ThirdSlot", new Vector2(250f, -4f), new Vector2(220f, 320f), 3, new Color(1f, 0.62f, 0.12f), new Color(0.72f, 0.4f, 0.12f), new Color(0.92f, 0.62f, 0.22f));
+            _secondSlot = BuildPodiumSlot(podiumRoot, "SecondSlot", new Vector2(-305f, 0f), new Vector2(226f, 290f), 2, new Color(0.83f, 0.86f, 0.93f), new Color(0.36f, 0.48f, 0.76f), new Color(0.66f, 0.7f, 0.8f));
+            _firstSlot  = BuildPodiumSlot(podiumRoot, "FirstSlot",  new Vector2(0f, 0f),    new Vector2(270f, 380f), 1, new Color(1f, 0.8f, 0.08f),   new Color(0.95f, 0.66f, 0.08f), new Color(1f, 0.86f, 0.28f));
+            _thirdSlot  = BuildPodiumSlot(podiumRoot, "ThirdSlot",  new Vector2(305f, 0f),  new Vector2(224f, 240f), 3, new Color(1f, 0.62f, 0.12f),  new Color(0.72f, 0.4f, 0.12f),  new Color(0.92f, 0.62f, 0.22f));
         }
 
         private PodiumSlotUi BuildPodiumSlot(RectTransform parent, string name, Vector2 position, Vector2 pedestalSize, int rank, Color ringColor, Color pedestalColor, Color glowColor)
         {
             RectTransform root = CreateRect(name, parent);
-            SetRect(root, new Vector2(0.5f, 0.5f), new Vector2(260f, 520f), position);
+            SetRect(root, new Vector2(0.5f, 0f), new Vector2(270f, 700f), position, new Vector2(0.5f, 0f));
 
-            Image avatarGlow = CreateCircleImage("AvatarGlow", root, new Color(glowColor.r, glowColor.g, glowColor.b, rank == 1 ? 0.22f : 0.16f), 1024, 4f);
-            SetRect(avatarGlow.rectTransform, new Vector2(0.5f, 1f), new Vector2(rank == 1 ? 182f : 160f, rank == 1 ? 182f : 160f), new Vector2(0f, -20f));
+            float top = pedestalSize.y;
 
-            Image ring = CreateCircleImage("AvatarRing", root, ringColor, 1024, 2f);
-            SetRect(ring.rectTransform, new Vector2(0.5f, 1f), new Vector2(rank == 1 ? 148f : 132f, rank == 1 ? 148f : 132f), new Vector2(0f, -28f));
-            AddShadow(ring.gameObject, new Color(0f, 0f, 0f, 0.22f), new Vector2(0f, -6f));
+            // 3D Podium Block Sprite (Using its native proportions)
+            Image pedestal = CreateImage("Pedestal", root, Color.white, false, false, 0f);
+            string podiumSpriteName = rank == 1 ? "podium_1st" : (rank == 2 ? "podium_2nd" : "podium_3rd");
+            var pSprite = LoadLeaderboardSprite(podiumSpriteName);
+            if (pSprite != null)
+            {
+                pedestal.sprite = pSprite;
+                pedestal.type = Image.Type.Simple;
+                pedestal.preserveAspect = true;
+                pedestal.color = Color.white;
+            }
+            else
+            {
+                pedestal.color = pedestalColor;
+            }
+            SetRect(pedestal.rectTransform, new Vector2(0.5f, 0f), pedestalSize, new Vector2(0f, 0f), new Vector2(0.5f, 0f));
+            AddShadow(pedestal.gameObject, new Color(0f, 0f, 0f, 0.28f), new Vector2(0f, -8f));
 
-            Image avatarFill = CreateCircleImage("AvatarFill", ring.rectTransform, new Color(0.07f, 0.2f, 0.49f, 1f), 1024, 2f);
-            Stretch(avatarFill.rectTransform, 8f, 8f, 8f, 8f);
+            // RankText is hidden when using 3D podium sprite because number is drawn in the art
+            TextMeshProUGUI rankText = CreateText("RankText", pedestal.rectTransform, "", _titleFont, 1f, Color.clear, FontStyles.Bold, TextAlignmentOptions.Center);
+            if (pSprite != null)
+            {
+                rankText.gameObject.SetActive(false);
+            }
+            else
+            {
+                rankText.text = rank.ToString(CultureInfo.InvariantCulture);
+                rankText.fontSize = rank == 1 ? 92f : 72f;
+                rankText.color = new Color(1f, 0.98f, 0.9f, 1f);
+                Stretch(rankText.rectTransform);
+            }
 
-            TextMeshProUGUI initialsText = CreateText("InitialsText", ring.rectTransform, "--", _bodyFont, rank == 1 ? 48f : 42f, Color.white, FontStyles.Bold, TextAlignmentOptions.Center);
-            Stretch(initialsText.rectTransform);
+            // Player Score (Generous vertical spacing and wider box above pedestal)
+            TextMeshProUGUI scoreText = CreateText("ScoreText", root, "0", _bodyFont, rank == 1 ? 40f : 34f, rank == 1 ? new Color(1f, 0.88f, 0.2f, 1f) : Color.white, FontStyles.Bold, TextAlignmentOptions.Center);
+            scoreText.enableAutoSizing = true;
+            scoreText.fontSizeMin = 20f;
+            scoreText.fontSizeMax = rank == 1 ? 42f : 36f;
+            SetRect(scoreText.rectTransform, new Vector2(0.5f, 0f), new Vector2(260f, 44f), new Vector2(0f, top + 14f), new Vector2(0.5f, 0f));
+            AddShadow(scoreText.gameObject, new Color(0f, 0f, 0f, 0.35f), new Vector2(0f, -3f));
 
-            TextMeshProUGUI nameText = CreateText("NameText", root, "Bekleniyor", _bodyFont, 30f, new Color(0.89f, 0.94f, 1f, 0.96f), FontStyles.Bold, TextAlignmentOptions.Center);
+            // Player Name (Prominent, spacious and clearly readable)
+            TextMeshProUGUI nameText = CreateText("NameText", root, "Bekleniyor", _bodyFont, rank == 1 ? 30f : 26f, new Color(0.9f, 0.95f, 1f, 1f), FontStyles.Bold, TextAlignmentOptions.Center);
             nameText.enableAutoSizing = true;
             nameText.fontSizeMin = 18f;
             nameText.fontSizeMax = 32f;
-            SetRect(nameText.rectTransform, new Vector2(0.5f, 1f), new Vector2(220f, 54f), new Vector2(0f, -186f));
+            SetRect(nameText.rectTransform, new Vector2(0.5f, 0f), new Vector2(260f, 40f), new Vector2(0f, top + 64f), new Vector2(0.5f, 0f));
+            AddShadow(nameText.gameObject, new Color(0f, 0f, 0f, 0.3f), new Vector2(0f, -2f));
 
-            TextMeshProUGUI scoreText = CreateText("ScoreText", root, "0", _bodyFont, rank == 1 ? 50f : 42f, Color.white, FontStyles.Bold, TextAlignmentOptions.Center);
-            scoreText.enableAutoSizing = true;
-            scoreText.fontSizeMin = 22f;
-            scoreText.fontSizeMax = rank == 1 ? 52f : 42f;
-            SetRect(scoreText.rectTransform, new Vector2(0.5f, 1f), new Vector2(220f, 56f), new Vector2(0f, -232f));
-            AddShadow(scoreText.gameObject, new Color(0f, 0f, 0f, 0.26f), new Vector2(0f, -3f));
+            // Avatar Ring / Frame (Resting comfortably above the name)
+            Vector2 ringSize = rank == 1 ? new Vector2(140f, 140f) : new Vector2(120f, 120f);
+            Image ring = CreateImage("AvatarRing", root, Color.white, false, false, 0f);
+            SetRect(ring.rectTransform, new Vector2(0.5f, 0f), ringSize, new Vector2(0f, top + 114f), new Vector2(0.5f, 0f));
 
-            Image pedestal = CreateImage("Pedestal", root, pedestalColor, false, true, 0.08f);
-            SetRect(pedestal.rectTransform, new Vector2(0.5f, 0f), pedestalSize, new Vector2(0f, 0f));
-            AddShadow(pedestal.gameObject, new Color(0f, 0f, 0f, 0.24f), new Vector2(0f, -10f));
+            string frameName = rank == 1 ? "frame_gold" : (rank == 2 ? "frame_silver" : "frame_bronze");
+            var frameSprite = LoadLeaderboardSprite(frameName);
+            if (frameSprite != null)
+            {
+                ring.sprite = frameSprite;
+                ring.preserveAspect = true;
+                ring.color = Color.white;
+            }
+            else
+            {
+                var goldFrameFallback = LoadLeaderboardSprite("frame_gold");
+                if (goldFrameFallback != null)
+                {
+                    ring.sprite = goldFrameFallback;
+                    ring.preserveAspect = true;
+                    ring.color = rank == 2 ? new Color(0.85f, 0.9f, 1f) : (rank == 3 ? new Color(1f, 0.78f, 0.55f) : Color.white);
+                }
+                else
+                {
+                    ring.color = ringColor;
+                }
+            }
 
-            Image pedestalGloss = CreateImage("PedestalGloss", pedestal.rectTransform, new Color(1f, 1f, 1f, 0.18f), false, true, 0.08f);
-            Stretch(pedestalGloss.rectTransform, 8f, 8f, 8f, pedestalSize.y * 0.56f);
+            Image avatarFill = CreateCircleImage("AvatarFill", ring.rectTransform, new Color(0.06f, 0.18f, 0.42f, 1f), 1024, 2f);
+            Stretch(avatarFill.rectTransform, 14f, 14f, 14f, 14f);
 
-            TextMeshProUGUI rankText = CreateText("RankText", pedestal.rectTransform, rank.ToString(CultureInfo.InvariantCulture), _titleFont, rank == 1 ? 92f : 72f, new Color(1f, 0.98f, 0.9f, 1f), FontStyles.Bold, TextAlignmentOptions.Center);
-            Stretch(rankText.rectTransform);
-            AddShadow(rankText.gameObject, new Color(0f, 0f, 0f, 0.24f), new Vector2(0f, -4f));
+            TextMeshProUGUI initialsText = CreateText("InitialsText", ring.rectTransform, "--", _bodyFont, rank == 1 ? 50f : 42f, Color.white, FontStyles.Bold, TextAlignmentOptions.Center);
+            Stretch(initialsText.rectTransform);
+
+            // Crown for 1st place (Resting right on top of the golden frame)
+            if (rank == 1)
+            {
+                var crownSprite = LoadLeaderboardSprite("crown_gold");
+                if (crownSprite != null)
+                {
+                    Image crown = CreateImage("Crown", root, Color.white, false, false, 0f);
+                    crown.sprite = crownSprite;
+                    crown.type = Image.Type.Simple;
+                    crown.preserveAspect = true;
+                    SetRect(crown.rectTransform, new Vector2(0.5f, 0f), new Vector2(84f, 84f), new Vector2(0f, top + 114f + ringSize.y - 18f), new Vector2(0.5f, 0f));
+                }
+            }
 
             return new PodiumSlotUi
             {
@@ -436,12 +791,12 @@ namespace BlockPuzzle.UnityAdapter.UI
         private void BuildList(RectTransform parent)
         {
             RectTransform listRoot = CreateRect("ListRoot", parent);
-            SetRect(listRoot, new Vector2(0.5f, 0f), new Vector2(860f, 420f), new Vector2(0f, 132f), new Vector2(0.5f, 0f));
+            SetRect(listRoot, new Vector2(0.5f, 1f), new Vector2(920f, 520f), new Vector2(0f, -940f), new Vector2(0.5f, 1f));
 
             int rowCount = Mathf.Max(3, Mathf.Max(6, maxEntries) - 3);
             for (int i = 0; i < rowCount; i++)
             {
-                float y = -i * 114f;
+                float y = -i * 156f;
                 _listRows.Add(BuildListRow(listRoot, $"Row{i + 4}", new Vector2(0f, y)));
             }
         }
@@ -449,34 +804,61 @@ namespace BlockPuzzle.UnityAdapter.UI
         private ListRowUi BuildListRow(RectTransform parent, string name, Vector2 position)
         {
             RectTransform root = CreateRect(name, parent);
-            SetRect(root, new Vector2(0.5f, 1f), new Vector2(820f, 92f), position, new Vector2(0.5f, 1f));
+            SetRect(root, new Vector2(0.5f, 1f), new Vector2(890f, 138f), position, new Vector2(0.5f, 1f));
 
-            Image background = CreateImage("Background", root, new Color(0.03f, 0.13f, 0.35f, 0.92f), false, true, 0.12f);
+            Image background = CreateImage("Background", root, Color.white, false, false, 0f);
+            var rowSprite = LoadLeaderboardSprite("row_bg_normal");
+            if (rowSprite != null)
+            {
+                background.sprite = rowSprite;
+                background.type = Image.Type.Simple;
+                background.color = Color.white;
+            }
+            else
+            {
+                background.color = new Color(0.03f, 0.13f, 0.35f, 0.92f);
+            }
             Stretch(background.rectTransform);
-            AddShadow(background.gameObject, new Color(0f, 0f, 0f, 0.18f), new Vector2(0f, -6f));
+            AddShadow(background.gameObject, new Color(0f, 0f, 0f, 0.22f), new Vector2(0f, -6f));
 
-            Outline outline = background.gameObject.AddComponent<Outline>();
-            outline.effectColor = new Color(0.1f, 0.34f, 0.74f, 0.48f);
-            outline.effectDistance = new Vector2(1.2f, -1.2f);
-            outline.useGraphicAlpha = true;
+            // Rank Badge: Concentric medallion perfectly centered inside the left rounded dome (x = 72)
+            Image rankBadge = CreateCircleImage("RankBadge", root, new Color(0.04f, 0.14f, 0.34f, 1f), 256, 1.5f);
+            SetRect(rankBadge.rectTransform, new Vector2(0f, 0.5f), new Vector2(74f, 74f), new Vector2(72f, 0f), new Vector2(0.5f, 0.5f));
+            AddShadow(rankBadge.gameObject, new Color(0f, 0f, 0f, 0.4f), new Vector2(0f, -3f));
 
-            Image rankBadge = CreateImage("RankBadge", root, new Color(0.06f, 0.18f, 0.42f, 1f), false, true, 0.26f);
-            SetRect(rankBadge.rectTransform, new Vector2(0f, 0.5f), new Vector2(98f, 62f), new Vector2(28f, 0f), new Vector2(0f, 0.5f));
+            // Badge border ring for high contrast
+            Image rankRing = CreateCircleImage("RankRing", rankBadge.rectTransform, new Color(0.3f, 0.65f, 1f, 0.75f), 256, 1.5f);
+            Stretch(rankRing.rectTransform);
+            Image rankInner = CreateCircleImage("RankInner", rankBadge.rectTransform, new Color(0.04f, 0.14f, 0.34f, 1f), 256, 1.5f);
+            Stretch(rankInner.rectTransform, 3f, 3f, 3f, 3f);
 
-            TextMeshProUGUI rankText = CreateText("RankText", rankBadge.rectTransform, "-", _bodyFont, 34f, new Color(0.69f, 0.83f, 1f, 1f), FontStyles.Bold, TextAlignmentOptions.Center);
-            Stretch(rankText.rectTransform);
+            // Rank Text: Centered with mathematical precision in the center of the medallion
+            TextMeshProUGUI rankText = CreateText("RankText", rankBadge.rectTransform, "-", _titleFont, 36f, Color.white, FontStyles.Bold, TextAlignmentOptions.Center);
+            rankText.horizontalAlignment = HorizontalAlignmentOptions.Center;
+            rankText.verticalAlignment = VerticalAlignmentOptions.Middle;
+            rankText.enableAutoSizing = true;
+            rankText.fontSizeMin = 22f;
+            rankText.fontSizeMax = 38f;
+            SetRect(rankText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(68f, 68f), new Vector2(0f, 1f), new Vector2(0.5f, 0.5f));
+            AddShadow(rankText.gameObject, new Color(0f, 0f, 0f, 0.5f), new Vector2(0f, -2f));
 
+            // Player Name: Generous width, left-aligned, vertically centered
             TextMeshProUGUI nameText = CreateText("NameText", root, "-", _bodyFont, 32f, Color.white, FontStyles.Bold, TextAlignmentOptions.Left);
+            nameText.verticalAlignment = VerticalAlignmentOptions.Middle;
+            nameText.horizontalAlignment = HorizontalAlignmentOptions.Left;
             nameText.enableAutoSizing = true;
             nameText.fontSizeMin = 20f;
-            nameText.fontSizeMax = 32f;
-            SetRect(nameText.rectTransform, new Vector2(0f, 0.5f), new Vector2(410f, 48f), new Vector2(168f, 0f), new Vector2(0f, 0.5f));
+            nameText.fontSizeMax = 34f;
+            SetRect(nameText.rectTransform, new Vector2(0f, 0.5f), new Vector2(450f, 54f), new Vector2(130f, 0f), new Vector2(0f, 0.5f));
 
-            TextMeshProUGUI scoreText = CreateText("ScoreText", root, "-", _bodyFont, 32f, new Color(0.98f, 0.99f, 1f, 1f), FontStyles.Bold, TextAlignmentOptions.Right);
+            // Score Text: Right-aligned, vertically centered, bold white
+            TextMeshProUGUI scoreText = CreateText("ScoreText", root, "-", _bodyFont, 34f, new Color(0.98f, 0.99f, 1f, 1f), FontStyles.Bold, TextAlignmentOptions.Right);
+            scoreText.verticalAlignment = VerticalAlignmentOptions.Middle;
+            scoreText.horizontalAlignment = HorizontalAlignmentOptions.Right;
             scoreText.enableAutoSizing = true;
-            scoreText.fontSizeMin = 20f;
-            scoreText.fontSizeMax = 32f;
-            SetRect(scoreText.rectTransform, new Vector2(1f, 0.5f), new Vector2(180f, 48f), new Vector2(-32f, 0f), new Vector2(1f, 0.5f));
+            scoreText.fontSizeMin = 22f;
+            scoreText.fontSizeMax = 36f;
+            SetRect(scoreText.rectTransform, new Vector2(1f, 0.5f), new Vector2(250f, 54f), new Vector2(-50f, 0f), new Vector2(1f, 0.5f));
 
             return new ListRowUi
             {
@@ -492,34 +874,42 @@ namespace BlockPuzzle.UnityAdapter.UI
         private void BuildHomeButton(RectTransform parent)
         {
             RectTransform buttonRoot = CreateRect("HomeButton", parent);
-            SetRect(buttonRoot, new Vector2(0f, 1f), new Vector2(220f, 84f), new Vector2(18f, -18f), new Vector2(0f, 1f));
+            SetRect(buttonRoot, new Vector2(0f, 1f), new Vector2(96f, 96f), new Vector2(16f, -12f), new Vector2(0f, 1f));
 
-            Image glow = CreateImage("ButtonGlow", buttonRoot, new Color(0.08f, 0.42f, 1f, 0.2f), false, false, 0.4f);
-            SetRect(glow.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(252f, 120f), Vector2.zero);
+            // Transparent hit area to guarantee clicks are always captured across the entire 96x96 rect
+            Image hitArea = buttonRoot.gameObject.AddComponent<Image>();
+            hitArea.color = Color.clear;
+            hitArea.raycastTarget = true;
 
-            Image buttonImage = CreateImage("ButtonFace", buttonRoot, new Color(0.13f, 0.43f, 0.98f, 1f), true, true, 0.24f);
+            Image buttonImage = CreateImage("ButtonFace", buttonRoot, Color.white, true, false, 0f);
+            buttonImage.raycastTarget = true;
+            var backSprite = LoadLeaderboardSprite("btn_back");
+            if (backSprite != null)
+            {
+                buttonImage.sprite = backSprite;
+                buttonImage.type = Image.Type.Simple;
+                buttonImage.preserveAspect = true;
+            }
+            else
+            {
+                buttonImage.color = new Color(0.13f, 0.43f, 0.98f, 1f);
+            }
             Stretch(buttonImage.rectTransform);
-            AddShadow(buttonImage.gameObject, new Color(0f, 0f, 0f, 0.22f), new Vector2(0f, -10f));
+            AddShadow(buttonImage.gameObject, new Color(0f, 0f, 0f, 0.28f), new Vector2(0f, -6f));
 
             Button button = buttonRoot.gameObject.AddComponent<Button>();
             ColorBlock colors = button.colors;
             colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1f, 1f, 1f, 0.98f);
-            colors.pressedColor = new Color(0.82f, 0.88f, 1f, 0.94f);
-            colors.selectedColor = colors.highlightedColor;
+            colors.highlightedColor = new Color(1f, 1f, 1f, 0.92f);
+            colors.pressedColor = new Color(0.82f, 0.82f, 0.82f, 1f);
+            colors.selectedColor = colors.normalColor;
             colors.disabledColor = new Color(0.7f, 0.7f, 0.7f, 0.7f);
             colors.fadeDuration = 0.08f;
             button.colors = colors;
-            button.targetGraphic = buttonImage;
-
-            TextMeshProUGUI iconText = CreateText("IconText", buttonRoot, "\u2190", _bodyFont, 42f, Color.white, FontStyles.Bold, TextAlignmentOptions.Center);
-            SetRect(iconText.rectTransform, new Vector2(0f, 0.5f), new Vector2(42f, 42f), new Vector2(26f, 0f), new Vector2(0f, 0.5f));
-            AddShadow(iconText.gameObject, new Color(0f, 0f, 0f, 0.24f), new Vector2(0f, -4f));
-
-            TextMeshProUGUI labelText = CreateText("LabelText", buttonRoot, "Geri", _bodyFont, 26f, new Color(0.88f, 0.94f, 1f, 0.96f), FontStyles.Bold, TextAlignmentOptions.Left);
-            SetRect(labelText.rectTransform, new Vector2(0f, 0.5f), new Vector2(112f, 36f), new Vector2(76f, 0f), new Vector2(0f, 0.5f));
+            button.targetGraphic = hitArea;
 
             _homeButton = button;
+            BindHomeButton();
         }
 
         private void CacheReferences()
@@ -575,7 +965,7 @@ namespace BlockPuzzle.UnityAdapter.UI
 
         private void BindHomeButton()
         {
-            if (_homeButton == null || _listenersBound)
+            if (_homeButton == null)
                 return;
 
             _homeButton.onClick.RemoveListener(LoadMainMenu);
@@ -603,40 +993,48 @@ namespace BlockPuzzle.UnityAdapter.UI
 
             RectTransform buttonRect = _homeButton.transform as RectTransform;
             if (buttonRect != null)
-                SetRect(buttonRect, new Vector2(0f, 1f), new Vector2(220f, 84f), new Vector2(18f, -18f), new Vector2(0f, 1f));
+                SetRect(buttonRect, new Vector2(0f, 1f), new Vector2(96f, 96f), new Vector2(16f, -12f), new Vector2(0f, 1f));
 
-            Transform glow = _homeButton.transform.Find("ButtonGlow");
-            if (glow is RectTransform glowRect)
-                SetRect(glowRect, new Vector2(0.5f, 0.5f), new Vector2(252f, 120f), Vector2.zero);
+            Image hitArea = _homeButton.GetComponent<Image>();
+            if (hitArea != null)
+                hitArea.raycastTarget = true;
+
+            var backSprite = LoadLeaderboardSprite("btn_back");
+            Image buttonImage = _homeButton.GetComponentInChildren<Image>();
+            if (buttonImage != null)
+            {
+                buttonImage.raycastTarget = true;
+                if (backSprite != null)
+                {
+                    buttonImage.sprite = backSprite;
+                    buttonImage.type = Image.Type.Simple;
+                    buttonImage.preserveAspect = true;
+                    buttonImage.color = Color.white;
+                }
+            }
 
             Transform icon = _homeButton.transform.Find("IconText");
             if (icon != null)
-            {
-                TextMeshProUGUI iconText = icon.GetComponent<TextMeshProUGUI>();
-                if (iconText != null)
-                {
-                    iconText.text = "\u2190";
-                    SetRect(iconText.rectTransform, new Vector2(0f, 0.5f), new Vector2(42f, 42f), new Vector2(26f, 0f), new Vector2(0f, 0.5f));
-                }
-            }
+                icon.gameObject.SetActive(false);
 
             Transform label = _homeButton.transform.Find("LabelText");
             if (label != null)
-            {
-                TextMeshProUGUI labelText = label.GetComponent<TextMeshProUGUI>();
-                if (labelText != null)
-                {
-                    labelText.text = "Geri";
-                    labelText.alignment = TextAlignmentOptions.Left;
-                    SetRect(labelText.rectTransform, new Vector2(0f, 0.5f), new Vector2(112f, 36f), new Vector2(76f, 0f), new Vector2(0f, 0.5f));
-                }
-            }
+                label.gameObject.SetActive(false);
+
+            BindHomeButton();
         }
 
         private void LoadMainMenu()
         {
+            Debug.Log("[HighScoreTableView] Back button tapped -> loading scene: " + SceneCatalog.MainMenu);
             if (!Application.isPlaying)
                 return;
+
+            try
+            {
+                Audio.AudioManager.Instance?.PlayUiClick();
+            }
+            catch {}
 
             SceneManager.LoadScene(SceneCatalog.MainMenu);
         }
@@ -664,52 +1062,90 @@ namespace BlockPuzzle.UnityAdapter.UI
         private async Task<List<LeaderboardRow>> BuildLeaderboardRowsAsync()
         {
             var remoteRows = await FetchRegisteredLeaderboardRowsAsync();
-            int localBestScore = _bestScoreStore != null ? _bestScoreStore.GetBestScore() : 0;
             FirebaseManager firebase = FirebaseManager.Instance;
-            string currentUserId = firebase?.CurrentUser?.UserId;
-            bool isRegisteredUser = firebase != null &&
-                                    firebase.IsInitialized &&
-                                    firebase.CurrentUser != null &&
-                                    !firebase.CurrentUser.IsAnonymous &&
-                                    !string.IsNullOrWhiteSpace(firebase.NormalizedUsername);
 
             SortAndRank(remoteRows);
+            await AttachCurrentPlayerRowAsync(remoteRows, firebase);
 
-            if (!string.IsNullOrWhiteSpace(currentUserId))
+            // Always keep the Scores screen useful when Firebase has no public
+            // document yet (especially for anonymous/local development users).
+            // AttachCurrentPlayerRowAsync intentionally cannot do this while
+            // Firebase is unavailable, so apply the local fallback here too.
+            if (!remoteRows.Any(row => row.IsCurrentPlayer))
             {
-                LeaderboardRow existingCurrentRow = remoteRows.FirstOrDefault(row =>
-                    string.Equals(row.UserId, currentUserId, StringComparison.Ordinal));
-
-                if (existingCurrentRow != null)
+                int localBestScore = GetLocalBestScore();
+                string localUserId = firebase?.CurrentUser?.UserId;
+                if (localBestScore > 0)
                 {
-                    existingCurrentRow.IsCurrentPlayer = true;
-                    existingCurrentRow.PlayerName = ResolveCurrentPlayerLabel();
-                }
-                else if (includeCurrentPlayerWhenMissing && localBestScore > 0)
-                {
-                    var currentRow = new LeaderboardRow
+                    remoteRows.Add(new LeaderboardRow
                     {
-                        UserId = currentUserId,
+                        UserId = string.IsNullOrWhiteSpace(localUserId) ? "local-player" : localUserId,
                         PlayerName = ResolveCurrentPlayerLabel(),
                         Score = localBestScore,
                         IsCurrentPlayer = true
-                    };
-
-                    InsertCurrentPlayerRow(remoteRows, currentRow, isRegisteredUser);
+                    });
+                    SortAndRank(remoteRows);
                 }
-            }
-            else if (includeCurrentPlayerWhenMissing && localBestScore > 0)
-            {
-                InsertCurrentPlayerRow(remoteRows, new LeaderboardRow
-                {
-                    UserId = "__local__",
-                    PlayerName = ResolveCurrentPlayerLabel(),
-                    Score = localBestScore,
-                    IsCurrentPlayer = true
-                }, false);
             }
 
             return BuildVisibleRows(remoteRows);
+        }
+
+        private async Task AttachCurrentPlayerRowAsync(List<LeaderboardRow> rows, FirebaseManager firebase)
+        {
+            if (rows == null || firebase?.CurrentUser == null)
+                return;
+
+            string currentUserId = firebase.CurrentUser.UserId;
+            if (string.IsNullOrWhiteSpace(currentUserId))
+                return;
+
+            LeaderboardRow existingCurrentRow = rows.FirstOrDefault(row =>
+                string.Equals(row.UserId, currentUserId, StringComparison.Ordinal));
+
+            if (existingCurrentRow != null)
+            {
+                existingCurrentRow.IsCurrentPlayer = true;
+                existingCurrentRow.PlayerName = ResolveCurrentPlayerLabel();
+                return;
+            }
+
+            if (useWeeklyLeaderboard)
+                return;
+
+            if (!firebase.CurrentUser.IsAnonymous)
+            {
+                try
+                {
+                    LeaderboardRow remoteCurrentRow = await FetchCurrentUserRemoteRowAsync(currentUserId);
+                    if (remoteCurrentRow != null)
+                    {
+                        remoteCurrentRow.IsCurrentPlayer = true;
+                        remoteCurrentRow.PlayerName = ResolveCurrentPlayerLabel();
+                        rows.Add(remoteCurrentRow);
+                        SortAndRank(rows);
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[HighScoreTableView] Failed to fetch current user remote score: {ex.Message}");
+                }
+            }
+
+            int localBestScore = GetLocalBestScore();
+            if (localBestScore <= 0)
+                return;
+
+            rows.Add(new LeaderboardRow
+            {
+                UserId = currentUserId,
+                PlayerName = ResolveCurrentPlayerLabel(),
+                Score = localBestScore,
+                IsCurrentPlayer = true
+            });
+
+            SortAndRank(rows);
         }
 
         private async Task<List<LeaderboardRow>> FetchRegisteredLeaderboardRowsAsync()
@@ -719,59 +1155,86 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (firebase == null)
                 return rows;
 
-            int waitCycles = 0;
-            while (!firebase.IsInitialized && waitCycles < 100)
+            if (!firebase.IsInitialized)
             {
-                waitCycles++;
-                await Task.Delay(50);
+                // Firebase not ready yet — HandleFirebaseInitialized will re-trigger Refresh()
+                return rows;
             }
 
-            if (!firebase.IsInitialized)
-                return rows;
-
-            Query query = FirebaseFirestore.DefaultInstance
-                .Collection(PublicLeaderboardCollection)
-                .OrderByDescending(useWeeklyLeaderboard ? "weeklyHighScore" : "highScore");
-
-            QuerySnapshot snapshot = await query.GetSnapshotAsync();
-            foreach (DocumentSnapshot document in snapshot.Documents)
+            try
             {
-                if (document == null || !document.Exists)
-                    continue;
+                await firebase.EnsureAuthenticatedForLeaderboardAsync();
 
-                Dictionary<string, object> data = document.ToDictionary();
-                if (!TryGetScore(data, useWeeklyLeaderboard ? "weeklyHighScore" : "highScore", out int score) || score <= 0)
-                    continue;
+                Query query = FirebaseFirestore.DefaultInstance
+                    .Collection(PublicLeaderboardCollection)
+                    .OrderByDescending(useWeeklyLeaderboard ? "weeklyHighScore" : "highScore");
 
-                string username = GetUsername(data);
-                if (string.IsNullOrWhiteSpace(username))
-                    continue;
-
-                rows.Add(new LeaderboardRow
+                QuerySnapshot snapshot = await query.GetSnapshotAsync();
+                string currentUserId = firebase.CurrentUser?.UserId;
+                foreach (DocumentSnapshot document in snapshot.Documents)
                 {
-                    UserId = document.Id,
-                    PlayerName = username,
-                    Score = score
-                });
+                    if (document == null || !document.Exists)
+                        continue;
+
+                    Dictionary<string, object> data = document.ToDictionary();
+                    if (!TryGetLeaderboardScore(data, useWeeklyLeaderboard, out int score) || score <= 0)
+                        continue;
+
+                    string username = GetUsername(data);
+                    bool isCurrentUser = string.Equals(document.Id, currentUserId, StringComparison.Ordinal);
+                    bool isGuest = TryGetBool(data, "isGuest");
+                    if (!isCurrentUser && (isGuest || string.IsNullOrWhiteSpace(username)))
+                        continue;
+
+                    rows.Add(new LeaderboardRow
+                    {
+                        UserId = document.Id,
+                        PlayerName = username,
+                        Score = score
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[HighScoreTableView] Firestore remote fetch failed: {ex.Message}");
             }
 
             return rows;
         }
 
-        private void InsertCurrentPlayerRow(List<LeaderboardRow> rows, LeaderboardRow currentRow, bool isRegisteredUser)
+        private async Task<LeaderboardRow> FetchCurrentUserRemoteRowAsync(string currentUserId)
         {
-            if (rows == null || currentRow == null)
-                return;
+            if (string.IsNullOrWhiteSpace(currentUserId))
+                return null;
 
-            int insertIndex = rows.FindIndex(row => row.Score < currentRow.Score);
-            if (insertIndex < 0)
-                insertIndex = rows.Count;
+            try
+            {
+                DocumentSnapshot snapshot = await FirebaseFirestore.DefaultInstance
+                    .Collection(UsersCollection)
+                    .Document(currentUserId)
+                    .GetSnapshotAsync();
 
-            if (!isRegisteredUser)
-                currentRow.UserId = "__local_guest__";
+                if (snapshot == null || !snapshot.Exists)
+                    return null;
 
-            rows.Insert(insertIndex, currentRow);
-            SortAndRank(rows);
+                Dictionary<string, object> data = snapshot.ToDictionary();
+                if (!TryGetLeaderboardScore(data, useWeeklyLeaderboard, out int score) || score <= 0)
+                    return null;
+
+                string username = GetUsername(data);
+                return new LeaderboardRow
+                {
+                    UserId = currentUserId,
+                    PlayerName = string.IsNullOrWhiteSpace(username) ? ResolveCurrentPlayerLabel() : username,
+                    Score = score,
+                    IsCurrentPlayer = true
+                };
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[HighScoreTableView] Error inside FetchCurrentUserRemoteRowAsync: {ex.Message}");
+                return null;
+            }
         }
 
         private List<LeaderboardRow> BuildVisibleRows(List<LeaderboardRow> rankedRows)
@@ -795,41 +1258,11 @@ namespace BlockPuzzle.UnityAdapter.UI
             return visible.OrderBy(row => row.Rank).ToList();
         }
 
-        private List<LeaderboardRow> BuildLocalFallbackRows()
-        {
-            int localBestScore = _bestScoreStore != null ? _bestScoreStore.GetBestScore() : 0;
-            if (localBestScore <= 0)
-                return BuildPreviewRows();
-
-            return new List<LeaderboardRow>
-            {
-                new LeaderboardRow
-                {
-                    UserId = "__local_fallback__",
-                    PlayerName = ResolveCurrentPlayerLabel(),
-                    Score = localBestScore,
-                    Rank = 1,
-                    IsCurrentPlayer = true
-                }
-            };
-        }
-
-        private List<LeaderboardRow> BuildPreviewRows()
-        {
-            string current = ResolveCurrentPlayerLabel();
-            return new List<LeaderboardRow>
-            {
-                new LeaderboardRow { PlayerName = "Mehmet A.", Score = 5079, Rank = 1 },
-                new LeaderboardRow { PlayerName = "Ayse K.", Score = 4210, Rank = 2 },
-                new LeaderboardRow { PlayerName = "Can T.", Score = 3850, Rank = 3 },
-                new LeaderboardRow { PlayerName = "Ece Y.", Score = 3441, Rank = 4 },
-                new LeaderboardRow { PlayerName = current, Score = 3120, Rank = 5, IsCurrentPlayer = true },
-                new LeaderboardRow { PlayerName = "Burak K.", Score = 2980, Rank = 6 }
-            };
-        }
-
         private void ApplyRows(List<LeaderboardRow> rows)
         {
+            if (this == null || !isActiveAndEnabled)
+                return;
+
             EnsureHierarchy();
             rows ??= new List<LeaderboardRow>();
 
@@ -869,13 +1302,16 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (slot == null || slot.Root == null)
                 return;
 
+            slot.Root.gameObject.SetActive(true);
+            if (slot.PodiumFill != null)
+                slot.PodiumFill.gameObject.SetActive(true);
+
             if (row == null)
             {
                 ApplyEmptyPodiumSlot(slot, rank, isLoading);
                 return;
             }
 
-            slot.Root.gameObject.SetActive(true);
             slot.InitialsText.text = GetInitials(row.IsCurrentPlayer ? ResolveCurrentPlayerLabel() : row.PlayerName);
             slot.NameText.text = row.IsCurrentPlayer ? ResolveCurrentPlayerLabel() : ShortenName(row.PlayerName);
             slot.ScoreText.text = FormatScore(row.Score);
@@ -883,13 +1319,23 @@ namespace BlockPuzzle.UnityAdapter.UI
 
             bool isCurrent = row.IsCurrentPlayer;
             if (slot.Ring != null)
-                slot.Ring.color = isCurrent ? currentPlayerColor : GetPodiumRingColor(rank);
+            {
+                if (slot.Ring.sprite == null)
+                    slot.Ring.color = isCurrent ? currentPlayerColor : GetPodiumRingColor(rank);
+                else
+                    slot.Ring.color = isCurrent ? new Color(1f, 0.95f, 0.7f, 1f) : Color.white;
+            }
             if (slot.AvatarFill != null)
                 slot.AvatarFill.color = isCurrent ? new Color(0.12f, 0.26f, 0.54f, 1f) : new Color(0.07f, 0.2f, 0.49f, 1f);
             if (slot.NameText != null)
                 slot.NameText.color = isCurrent ? currentPlayerColor : new Color(0.89f, 0.94f, 1f, 0.96f);
             if (slot.PodiumFill != null)
-                slot.PodiumFill.color = GetPodiumFillColor(rank);
+            {
+                if (slot.PodiumFill.sprite == null)
+                    slot.PodiumFill.color = GetPodiumFillColor(rank);
+                else
+                    slot.PodiumFill.color = Color.white;
+            }
         }
 
         private string GetLoadingText()
@@ -907,12 +1353,14 @@ namespace BlockPuzzle.UnityAdapter.UI
                 return;
 
             slot.Root.gameObject.SetActive(true);
+            if (slot.PodiumFill != null)
+                slot.PodiumFill.gameObject.SetActive(true);
             slot.InitialsText.text = "--";
             slot.NameText.text = isLoading && rank == 1 ? GetLoadingText() : emptyEntryText;
             slot.ScoreText.text = isLoading ? "..." : emptyEntryText;
             slot.RankText.text = rank.ToString(CultureInfo.InvariantCulture);
 
-            if (slot.Ring != null)
+            if (slot.Ring != null && slot.Ring.sprite == null)
                 slot.Ring.color = GetPodiumRingColor(rank);
             if (slot.AvatarFill != null)
                 slot.AvatarFill.color = new Color(0.07f, 0.2f, 0.49f, 1f);
@@ -920,7 +1368,7 @@ namespace BlockPuzzle.UnityAdapter.UI
                 slot.NameText.color = new Color(0.89f, 0.94f, 1f, 0.68f);
             if (slot.ScoreText != null)
                 slot.ScoreText.color = new Color(0.98f, 0.99f, 1f, 0.58f);
-            if (slot.PodiumFill != null)
+            if (slot.PodiumFill != null && slot.PodiumFill.sprite == null)
                 slot.PodiumFill.color = GetPodiumFillColor(rank);
         }
 
@@ -930,11 +1378,23 @@ namespace BlockPuzzle.UnityAdapter.UI
                 return;
 
             if (rowUi.Background != null)
-                rowUi.Background.color = isCurrentPlayer ? new Color(0.13f, 0.22f, 0.46f, 0.98f) : new Color(0.03f, 0.13f, 0.35f, 0.92f);
+            {
+                var rowSprite = LoadLeaderboardSprite(isCurrentPlayer ? "row_bg_player" : "row_bg_normal");
+                if (rowSprite != null)
+                {
+                    rowUi.Background.sprite = rowSprite;
+                    rowUi.Background.type = Image.Type.Simple;
+                    rowUi.Background.color = Color.white;
+                }
+                else
+                {
+                    rowUi.Background.color = isCurrentPlayer ? new Color(0.13f, 0.22f, 0.46f, 0.98f) : new Color(0.03f, 0.13f, 0.35f, 0.92f);
+                }
+            }
             if (rowUi.RankBadge != null)
-                rowUi.RankBadge.color = isCurrentPlayer ? currentPlayerColor : new Color(0.06f, 0.18f, 0.42f, 1f);
+                rowUi.RankBadge.color = isCurrentPlayer ? currentPlayerColor : new Color(0.06f, 0.18f, 0.42f, 0.85f);
             if (rowUi.RankText != null)
-                rowUi.RankText.color = isCurrentPlayer ? new Color(0.17f, 0.15f, 0.08f, 1f) : new Color(0.69f, 0.83f, 1f, 1f);
+                rowUi.RankText.color = isCurrentPlayer ? new Color(0.17f, 0.15f, 0.08f, 1f) : new Color(0.85f, 0.93f, 1f, 1f);
             if (rowUi.NameText != null)
                 rowUi.NameText.color = isCurrentPlayer ? currentPlayerColor : Color.white;
             if (rowUi.ScoreText != null)
@@ -946,7 +1406,9 @@ namespace BlockPuzzle.UnityAdapter.UI
             if (rowUi == null || rowUi.Root == null)
                 return;
 
-            rowUi.Root.gameObject.SetActive(true);
+            // Do not leave a misleading empty rank card on the finished screen.
+            // LoadingState explicitly reactivates all rows while data is pending.
+            rowUi.Root.gameObject.SetActive(false);
             rowUi.RankText.text = rank.ToString(CultureInfo.InvariantCulture);
             rowUi.NameText.text = emptyEntryText;
             rowUi.ScoreText.text = emptyEntryText;
@@ -1062,6 +1524,34 @@ namespace BlockPuzzle.UnityAdapter.UI
             }
         }
 
+        private static bool TryGetLeaderboardScore(Dictionary<string, object> data, bool weekly, out int score)
+        {
+            return TryGetScore(data, weekly ? "weeklyHighScore" : "highScore", out score);
+        }
+
+        private int GetLocalBestScore()
+        {
+            if (_bestScoreStore == null)
+                _bestScoreStore = new BestScoreStore(new PlayerPrefsStorage());
+
+            return _bestScoreStore.GetBestScore();
+        }
+
+        private static bool TryGetBool(Dictionary<string, object> data, string key)
+        {
+            if (data == null || string.IsNullOrWhiteSpace(key) || !data.TryGetValue(key, out object raw) || raw == null)
+                return false;
+
+            try
+            {
+                return Convert.ToBoolean(raw, CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static string GetUsername(Dictionary<string, object> data)
         {
             if (data == null)
@@ -1072,6 +1562,15 @@ namespace BlockPuzzle.UnityAdapter.UI
 
             if (data.TryGetValue("normalizedUsername", out object normalized) && normalized != null)
                 return normalized.ToString();
+
+            if (data.TryGetValue("displayName", out object displayName) && displayName != null)
+                return displayName.ToString();
+
+            if (data.TryGetValue("playerName", out object playerName) && playerName != null)
+                return playerName.ToString();
+
+            if (data.TryGetValue("name", out object name) && name != null)
+                return name.ToString();
 
             return string.Empty;
         }
@@ -1119,8 +1618,6 @@ namespace BlockPuzzle.UnityAdapter.UI
         {
             RectTransform rect = CreateRect(name, parent);
             Image image = rect.gameObject.AddComponent<Image>();
-            image.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/UISprite.psd");
-            image.type = Image.Type.Sliced;
             image.color = color;
             image.raycastTarget = raycastTarget;
             if (rounded)
@@ -1158,6 +1655,7 @@ namespace BlockPuzzle.UnityAdapter.UI
             text.color = color;
             text.fontStyle = style;
             text.alignment = alignment;
+            text.verticalAlignment = VerticalAlignmentOptions.Middle;
             text.textWrappingMode = TextWrappingModes.NoWrap;
             text.raycastTarget = false;
             return text;
@@ -1238,6 +1736,40 @@ namespace BlockPuzzle.UnityAdapter.UI
             Transform target = root.Find(path);
             return target != null ? target.GetComponent<T>() : null;
         }
+
+#if UNITY_EDITOR
+        [ContextMenu("Rebuild Rich Layout")]
+        public void RebuildRichLayoutMenu()
+        {
+            Transform existing = transform.Find(RichRootName);
+            if (existing != null)
+            {
+                DestroyImmediate(existing.gameObject);
+            }
+            _richRoot = null;
+            EnsureHierarchy();
+            UnityEditor.EditorUtility.SetDirty(this);
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(gameObject.scene);
+        }
+
+        [UnityEditor.MenuItem("Tools/BlokDunyasi/UI/Rebuild Scores Layout")]
+        public static void RebuildAllScoresLayoutMenu()
+        {
+            var views = UnityEngine.Object.FindObjectsByType<HighScoreTableView>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            if (views != null && views.Length > 0)
+            {
+                foreach (var v in views)
+                {
+                    v.RebuildRichLayoutMenu();
+                }
+                Debug.Log("[HighScoreTableView] Rebuilt layout for " + views.Length + " HighScoreTableView instances.");
+            }
+            else
+            {
+                Debug.LogWarning("[HighScoreTableView] No HighScoreTableView found in active scene.");
+            }
+        }
+#endif
     }
 
     [ExecuteAlways]

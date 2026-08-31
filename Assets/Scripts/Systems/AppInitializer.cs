@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using BlockPuzzle.Core.Common;
 
 /// <summary>
@@ -36,12 +37,47 @@ public class AppInitializer : MonoBehaviour
             instance = this;
             DontDestroyOnLoad(gameObject);
             CleanDuplicateEventSystems();
+            InitializeAds();
+            InitializeMetaSystems();
             _initializationRoutine = StartCoroutine(InitializeSystemsRoutine());
         }
         else if (instance != this)
         {
             Destroy(gameObject);
         }
+    }
+
+    private void InitializeAds()
+    {
+        var config = Resources.Load<AdMobRuntimeConfig>(AdMobRuntimeConfig.ResourcesPath);
+        UnityEngine.Debug.Log($"[AppInitializer] Automatic ads startup. configFound={config != null}; loadOnStartup={config == null || config.LoadAdsOnStartup}");
+        if (config != null && !config.LoadAdsOnStartup)
+        {
+            GameLogger.Log("[AppInitializer] Reklam baslatma runtime config tarafindan kapatildi.");
+            return;
+        }
+
+        AdMobManager.Instance.ConfigureAndLoadAds(string.Empty, string.Empty, string.Empty);
+        SceneManager.sceneLoaded += HandleSceneLoadedForAds;
+        ApplyBannerPolicyForScene(SceneManager.GetActiveScene().name);
+    }
+
+    private void InitializeMetaSystems()
+    {
+        _ = BlockPuzzle.Core.Meta.Missions.MissionManager.Instance;
+        _ = BlockPuzzle.Core.Meta.AchievementManager.Instance;
+    }
+
+    private void HandleSceneLoadedForAds(Scene scene, LoadSceneMode mode)
+    {
+        ApplyBannerPolicyForScene(scene.name);
+    }
+
+    private void ApplyBannerPolicyForScene(string sceneName)
+    {
+        var config = Resources.Load<AdMobRuntimeConfig>(AdMobRuntimeConfig.ResourcesPath);
+        bool wantBanner = config == null || config.ShouldShowBannerForScene(sceneName);
+        AdMobManager.Instance.SetBannerWanted(wantBanner);
     }
 
     private void CleanDuplicateEventSystems()
@@ -81,6 +117,7 @@ public class AppInitializer : MonoBehaviour
 
     private void OnDestroy()
     {
+        SceneManager.sceneLoaded -= HandleSceneLoadedForAds;
         if (_initializationRoutine != null)
         {
             StopCoroutine(_initializationRoutine);

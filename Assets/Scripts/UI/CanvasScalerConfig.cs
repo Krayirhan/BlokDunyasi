@@ -19,7 +19,7 @@ public static class CanvasScalerConfig
     /// </summary>
     public static void ApplyToCurrentScene()
     {
-        var canvases = Object.FindObjectsOfType<Canvas>();
+        var canvases = Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None);
         int count = 0;
 
         foreach (var canvas in canvases)
@@ -66,7 +66,7 @@ public static class CanvasScalerConfig
     [MenuItem("UI/Canvas Scaler/Log Canvas Scaler Info")]
     private static void MenuLogCanvasInfo()
     {
-        var canvases = Object.FindObjectsOfType<Canvas>();
+        var canvases = Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None);
         Debug.Log($"[CanvasScalerConfig] Found {canvases.Length} Canvas(es):");
 
         foreach (var canvas in canvases)

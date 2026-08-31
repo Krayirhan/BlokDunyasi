@@ -1,0 +1,19 @@
+{
+    "name": "BlockPuzzleUnityAdapter.Editor",
+    "rootNamespace": "BlockPuzzle.UnityAdapter.Editor",
+    "references": [
+        "BlockPuzzleUnityAdapter",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

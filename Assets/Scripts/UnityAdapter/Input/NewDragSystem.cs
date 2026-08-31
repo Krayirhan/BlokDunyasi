@@ -3,6 +3,7 @@ using BlockPuzzle.Core.Board;
 using BlockPuzzle.Core.Common;
 using BlockPuzzle.Core.Shapes;
 using BlockPuzzle.UnityAdapter.Audio;
+using BlockPuzzle.UnityAdapter.Animation;
 using BlockPuzzle.UnityAdapter.Blocks;
 using BlockPuzzle.UnityAdapter.Boot;
 using BlockPuzzle.UnityAdapter.Grid;
@@ -662,19 +663,22 @@ namespace BlockPuzzle.UnityAdapter.Input
                 Debug.LogWarning($"[NewDragSystem] Rejecting drop because committed preview anchor {commitAnchor} is no longer valid at release.");
             }
 
+            int placedSlotIndex = _draggedBlock.SlotIndex;
             bool placed = _bootstrap != null &&
                           hasCommitAnchor &&
                           commitAnchorStillValid &&
-                          _bootstrap.TryPlaceBlock(_draggedBlock.SlotIndex, commitAnchor);
+                          _bootstrap.TryPlaceBlock(placedSlotIndex, commitAnchor);
 
             if (placed)
             {
+                EmitPlacementFeedback(_draggedBlock, commitAnchor);
+
                 bool slotRefilled = _bootstrap != null &&
                                     _bootstrap.CurrentState != null &&
-                                    _bootstrap.CurrentState.ActiveBlocks.HasBlockAt(_draggedBlock.SlotIndex);
+                                    _bootstrap.CurrentState.ActiveBlocks.HasBlockAt(placedSlotIndex);
 
                 if (!slotRefilled)
-                    blockTray?.MarkBlockAsUsed(_draggedBlock.SlotIndex);
+                    blockTray?.MarkBlockAsUsed(placedSlotIndex);
             }
             else
             {
@@ -685,6 +689,25 @@ namespace BlockPuzzle.UnityAdapter.Input
             }
 
             FinishDragState();
+        }
+
+        private void EmitPlacementFeedback(NewSimpleBlock block, Int2 anchor)
+        {
+            if (block == null || gridView == null || VFXEmitter.Instance == null || _draggedShapeOffsets == null)
+                return;
+
+            Color blockColor = block.BlockColor;
+            float cellSize = gridView.CellSize;
+
+            for (int i = 0; i < _draggedShapeOffsets.Count; i++)
+            {
+                Int2 offset = _draggedShapeOffsets[i];
+                Vector3 cellPosition = gridView.GetWorldPosition(anchor.X + offset.X, anchor.Y + offset.Y);
+                Transform cellTransform = gridView.GetCellTransform(anchor.X + offset.X, anchor.Y + offset.Y);
+                if (cellTransform != null)
+                    AnimationController.Instance.PlayBlockPlacementAnim(cellTransform.gameObject);
+                VFXEmitter.Instance.EmitPlacementDust(cellPosition, cellSize, blockColor);
+            }
         }
 
         private void CancelDrag()

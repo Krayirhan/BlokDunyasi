@@ -1,12 +1,7 @@
+using BlockPuzzle.Core.Common;
+
 namespace BlockPuzzle.UnityAdapter.Boot
 {
-    public enum GameMode
-    {
-        Classic = 0,
-        Challenge = 1,
-        Zen = 2
-    }
-
     public enum GameLaunchMode
     {
         Auto,

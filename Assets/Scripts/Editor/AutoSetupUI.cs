@@ -10,7 +10,7 @@ public static class AutoSetupUI
     [MenuItem("BlokDunyasi/2-Tıkla UI Kur (Auth UI)")]
     public static void CreateAuthUI()
     {
-        var canvas = GameObject.FindObjectOfType<Canvas>();
+        var canvas = UnityEngine.Object.FindAnyObjectByType<Canvas>();
         if (canvas == null)
         {
             Debug.LogError("No Canvas found in scene. Please open your MainMenu scene and make sure a Canvas exists.");
@@ -116,7 +116,7 @@ public static class AutoSetupUI
         // Create AuthManager if missing (so guest id exists immediately)
         var authMgrType = Type.GetType("BlockPuzzle.UnityAdapter.Auth.AuthManager, BlockPuzzleUnityAdapter");
         if (authMgrType == null) authMgrType = Type.GetType("BlockPuzzle.UnityAdapter.Auth.AuthManager");
-        var existing = GameObject.FindObjectOfType(authMgrType);
+        var existing = authMgrType != null ? UnityEngine.Object.FindAnyObjectByType(authMgrType) : null;
         if (existing == null && authMgrType != null)
         {
             var amgo = new GameObject("AuthManager");

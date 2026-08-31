@@ -1,3 +1,4 @@
+#pragma warning disable 0414
 using TMPro;
 using UnityEngine;
 
@@ -109,24 +110,14 @@ namespace BlockPuzzle.UnityAdapter.UI.Localization
             if (textComponent == null)
                 return;
 
-            if (_originalFont != null)
+            TMP_FontAsset font = LocalizedFontUtility.ResolveTmpFont(language, _originalFont);
+            if (font != null)
             {
-                textComponent.font = _originalFont;
-                LocalizedFontUtility.EnsureFallback(_originalFont);
-            }
+                textComponent.font = font;
+                if (font.material != null)
+                    textComponent.fontSharedMaterial = font.material;
 
-            if (_originalMaterial != null)
-                textComponent.fontSharedMaterial = _originalMaterial;
-
-            if (language == LanguageManager.Language.Korean && useKoreanFont)
-            {
-                TMP_FontAsset font = LocalizedFontUtility.ResolveTmpFont(language, _originalFont);
-                if (font != null && font != _originalFont)
-                {
-                    textComponent.font = font;
-                    if (font.material != null)
-                        textComponent.fontSharedMaterial = font.material;
-                }
+                LocalizedFontUtility.EnsureFallback(font);
             }
         }
 
