@@ -4,9 +4,9 @@
 
 # Blok Dünyası
 
-### Renkli bloklar. Akıllı hamleler. Daha yüksek skor.
+### Bir hamle daha… Sonra bir rekor daha.
 
-Unity 6 ile geliştirilen, mobil odaklı blok puzzle oyunu.
+Bloklarını yerleştir, tahtayı temizle, komboyu büyüt ve kendi rekorunu geç. Blok Dünyası; kısa molaları heyecanlı bir mücadeleye dönüştüren mobil puzzle deneyimidir.
 
 [![Unity 6](https://img.shields.io/badge/Unity-6-black?logo=unity)](https://unity.com/)
 [![C#](https://img.shields.io/badge/C%23-12-239120?logo=csharp&logoColor=white)](https://learn.microsoft.com/dotnet/csharp/)
@@ -23,7 +23,17 @@ Unity 6 ile geliştirilen, mobil odaklı blok puzzle oyunu.
 
 Blok Dünyası’nda farklı şekillerdeki blokları 8×8 veya 10×10 oyun tahtasına yerleştir. Satır ve sütunları tamamla, tahtayı temizle, kombo zincirleri kur ve en yüksek skoru hedefle.
 
-## Öne çıkanlar
+Kurallar kolay. Ustalaşması zor. En iyi skor tamamen senin planına bağlı.
+
+### Neden tekrar tekrar oynayacaksın?
+
+- **İlk hamlede öğren, yüzüncü hamlede ustalaş.** Basit kontroller, derin strateji.
+- **Komboyu yakala.** Arka arkaya temizlemelerle skorunu katla.
+- **Kendi rekoruna meydan oku.** Her oyun, geçilecek yeni bir hedef bırakır.
+- **Kısa molalar için ideal.** Birkaç dakikada oynanır; kaldığın yerden devam eder.
+- **Sakinleş veya yarış.** Rahatlatıcı bir bulmaca turu da mümkün, skor avı da.
+
+## Oyuncu deneyimi
 
 | 🧩 Stratejik puzzle | 🎨 Canlı temalar | 📈 İlerleme sistemi |
 | --- | --- | --- |
@@ -32,6 +42,14 @@ Blok Dünyası’nda farklı şekillerdeki blokları 8×8 veya 10×10 oyun tahta
 | 📱 Mobil kontrol | 💾 Güvenli kayıt | 🔒 Hazır servis katmanı |
 | --- | --- | --- |
 | Dokunmatik sürükle-bırak ve masaüstü test akışı. | En iyi skor, ayarlar ve oyun durumu için kalıcı kayıt. | AdMob, Firebase Analytics/Crashlytics ve Google Play Games entegrasyonları. |
+
+## Bir sonraki hamlen hazır mı?
+
+Tahtada boş bir alan var. Elindeki parçalar bekliyor. Şimdi oyna, ilk kombonu kur ve **“bir tur daha”** demenin neden bu kadar kolay olduğunu keşfet.
+
+<p align="center">
+  <strong>🟨 Yerleştir &nbsp; → &nbsp; 🟩 Temizle &nbsp; → &nbsp; 🟪 Komboyu büyüt &nbsp; → &nbsp; 🏆 Rekorunu kır</strong>
+</p>
 
 ## Oyun içinden gerçek ekranlar
 
