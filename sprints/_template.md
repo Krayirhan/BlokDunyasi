@@ -1,97 +1,108 @@
-# Sprint XX — [Başlık]
+# Sprint Template
 
-> Bu şablonu kopyala → `sprints/active/sprint-XX/` klasörüne yapıştır.
-> brief.md, tasks.md, report.md olarak 3 ayrı dosyaya böl.
+Copy this template into `sprints/active/sprint-XX/` and split it into `brief.md`, `tasks.md`, and `report.md`.
 
----
-
-## brief.md şablonu
+## brief.md
 
 ```markdown
-# Sprint XX Brief — [Başlık]
+# Sprint XX Brief - [Title]
 
-**Tarih:** YYYY-MM-DD
-**Tahmini süre:** X gün
-**Lead agent:** [agent-adı]
-**Destek agent(lar):** [agent-adı, ...]
+- Status: draft/approved/in-progress/closed
+- Date: YYYY-MM-DD
+- Target duration: X days
+- Lead owner: `owner`
+- Supporting owners: `owner`, `owner`
 
-## Hedef
-[Bu sprint ne bitirince başarılı sayılır — 2-3 cümle]
+## Goal
+
+[One short paragraph describing the outcome.]
+
+## Success Criteria
+
+- [ ] Observable result 1
+- [ ] Observable result 2
+- [ ] Required verification passes
 
 ## Scope
-[Nelerin yapılacağı — madde madde]
 
-## Scope Dışı
-[Nelerin yapılmayacağı — kapsam kaymasını önler]
+- [Included work]
 
-## Önkoşullar
-[Başlamak için ne gerekiyor]
+## Out Of Scope
 
-## Riskler
-[Olası engeller]
+- [Explicitly excluded work]
+
+## Risks
+
+- [Risk and mitigation]
+
+## Required Verification
+
+```powershell
+dotnet build Assembly-CSharp.csproj -v:minimal
+dotnet build BlockPuzzleUnityAdapter.csproj -v:minimal
+dotnet test Tests\BlockPuzzle.Core.Tests\BlockPuzzle.Core.Tests.csproj -v:minimal
+git diff --check
+```
 ```
 
----
-
-## tasks.md şablonu
+## tasks.md
 
 ```markdown
-# Sprint XX — Görev Listesi
+# Sprint XX Tasks - [Title]
 
-Durum: 🔴 todo | 🟡 in-progress | ✅ done | ⛔ blocked
+Legend: todo | in-progress | done | blocked | deferred
 
----
+## T-01 - [Task title]
 
-### T-01 — [Görev başlığı]
-- Agent: `agent-adı`
-- Öncelik: P1
-- Durum: 🔴 todo
-- Bağımlılık: —
-- Etkilenen dosyalar:
-  - `Assets/Scripts/.../Dosya.cs`
-- Kabul kriteri:
-  - [ ] Kriter 1
-  - [ ] Kriter 2
-
----
-
-### T-02 — [Görev başlığı]
-- Agent: `agent-adı`
-- Öncelik: P2
-- Durum: 🔴 todo
-- Bağımlılık: T-01
-- Etkilenen dosyalar:
-  - `Assets/Scripts/.../Dosya.cs`
-- Kabul kriteri:
-  - [ ] Kriter 1
+- Backlog ref: B-XXX
+- Owner: `owner`
+- Priority: P1
+- Status: todo
+- Dependencies: none
+- Files:
+  - `Assets/Scripts/...`
+- Acceptance:
+  - [ ] Concrete observable result
+- Verification:
+  - [ ] Command/manual check
+- Notes:
+  - Keep notes short and factual.
 ```
 
----
-
-## report.md şablonu
+## report.md
 
 ```markdown
-# Sprint XX Report — [Başlık]
+# Sprint XX Report - [Title]
 
-**Kapanış tarihi:** YYYY-MM-DD
+- Status: open/closed
+- Close date: YYYY-MM-DD
 
-## Özet
-[Ne yapıldı — 3-5 cümle]
+## Summary
 
-## Tamamlanan Tasklar
-| Task | Durum | Not |
-|------|-------|-----|
-| T-01 | ✅ done | |
-| T-02 | ✅ done | |
+[What changed and why.]
 
-## Tamamlanamayan Tasklar
-| Task | Neden | Backlog'a eklendi mi |
-|------|-------|---------------------|
-| T-03 | Zaman yetersizliği | ✅ |
+## Completed Tasks
 
-## Ortaya Çıkan Yeni Borç
-- [yeni borç 1]
+| Task | Result | Evidence |
+|---|---|---|
+| T-01 | done | `command` passed |
 
-## Bir Sonraki Sprinte Öneriler
-- [öneri]
+## Not Completed
+
+| Task | Status | Reason | Backlog ref |
+|---|---|---|---|
+
+## Verification
+
+```text
+[Paste concise command results.]
+```
+
+## Risks Left
+
+- [Risk]
+
+## Follow-Up Backlog
+
+- B-XXX - [Title]
 ```

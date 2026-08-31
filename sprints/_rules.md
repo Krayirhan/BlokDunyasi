@@ -1,106 +1,150 @@
-# Sprint Kuralları
+# Sprint Rules
 
-> Bu dosya değiştirilemez. Sprint yapısını bozmak istersen önce bu kuralları güncelle ve gerekçeni yaz.
+These rules define how sprint work is planned, executed, and closed in this repository.
+Change this file only when the user explicitly asks to change the sprint process.
 
----
+## 1. Directory Contract
 
-## 1. Sprint Anatomisi
+Each sprint has exactly this shape:
 
-Her sprint tam olarak şu 3 dosyadan oluşur:
-
-```
+```text
 sprints/active/sprint-XX/
-├── brief.md    — amaç, scope, agent atamaları  (sprint başında yazılır)
-├── tasks.md    — görev listesi + durum         (sprint boyunca güncellenir)
-└── report.md   — sonuç, kalan borç             (sprint bitince yazılır)
+  brief.md
+  tasks.md
+  report.md
 ```
 
-Sprint klasör adı: `sprint-NN` (iki haneli, sıralı: sprint-01, sprint-02…)
+Archive path:
 
----
-
-## 2. Sprint Akışı (DEĞİŞTİRİLMEZ)
-
-```
-[Backlog] → brief.md yaz → Onay → tasks.md aç → Çalış → report.md yaz → [Arşiv]
+```text
+sprints/archive/sprint-XX/
 ```
 
-1. **Brief** — Sprint başlamadan `brief.md` yazılır. Scope nettir, agent ataması vardır.
-2. **Onay** — Brief insan tarafından onaylanır. Onaysız sprint başlamaz.
-3. **Çalış** — `tasks.md` her görev tamamlandığında güncellenir.
-4. **Report** — Sprint tamamlanınca `report.md` yazılır. Tamamlanmayan işler backlog'a döner.
-5. **Arşiv** — `sprints/active/sprint-XX/` → `sprints/archive/sprint-XX/` taşınır.
+Naming:
 
----
+- Sprint folder names use two digits: `sprint-01`, `sprint-02`, `sprint-03`.
+- There can be only one folder inside `sprints/active/`.
+- `sprints/backlog.md` is the only backlog source.
 
-## 3. Eş Zamanlı Sprint Kuralı
+## 2. Sprint Lifecycle
 
-**Aktif sprint yalnızca 1 tane olur.**
-
-`sprints/active/` içinde birden fazla sprint klasörü olamaz. Yeni sprint için aktif sprint önce kapatılır.
-
----
-
-## 4. Agent Atama Kuralları
-
-- Her task bir **primary agent**'a atanır.
-- Bir task birden fazla agent gerektiriyorsa **lead agent** belirlenir, diğerleri destekler.
-- Agent sınırları ihlal edilmez — örneğin `core-engine` agent UI dosyasına dokunmaz.
-
-**Geçerli agentlar:**
-| Agent | Sorumluluk |
-|-------|-----------|
-| `core-engine` | Pure C# oyun motoru |
-| `persistence` | Save/load, migration |
-| `ui-layout` | UI, canvas, responsive layout |
-| `input` | Drag, dokunma, placement preview |
-| `audio` | Ses sistemi |
-| `meta` | Mission, achievement, leaderboard |
-| `monetization` | Reklam, IAP, ekonomi |
-| `build-release` | Build, CI, store |
-
----
-
-## 5. Task Formatı
-
-`tasks.md` içinde her task:
-
-```
-### T-NN — Başlık
-- Agent: `agent-adı`
-- Öncelik: P0 / P1 / P2
-- Durum: todo / in-progress / done / blocked
-- Bağımlılık: T-XX (varsa)
-- Etkilenen dosyalar: path/to/file.cs
-- Kabul kriteri: Ne yapılınca bitti sayılır
+```text
+Backlog -> Brief -> Approval -> Tasks -> Work -> Report -> Archive
 ```
 
----
+Required gates:
 
-## 6. Öncelik Tanımları
+- Brief gate: `brief.md` exists before implementation starts.
+- Approval gate: sprint starts only after explicit user approval or a direct user instruction to execute that sprint.
+- Task gate: every implementation maps to a task ID in `tasks.md`.
+- Verification gate: every done task includes evidence.
+- Closure gate: `report.md` is completed before archiving.
 
-| Öncelik | Anlam |
-|---------|-------|
-| P0 | Oyun çalışmıyor veya crash — sprint blokeri |
-| P1 | Önemli özellik eksik veya ciddi bug |
-| P2 | İyileştirme, refactor, borç ödeme |
+## 3. Scope Control
 
-P0 task varken P2 task başlatılamaz.
+- Do not silently expand sprint scope.
+- Newly discovered bugs go to `sprints/backlog.md`.
+- A new issue can enter the active sprint only if it blocks a current P0/P1 task or the user explicitly approves it.
+- Refactor is not a goal by itself; it must protect or enable a concrete behavior.
 
----
+## 4. Priority Rules
 
-## 7. Tamamlanma Kriteri
+| Priority | Meaning |
+|---|---|
+| P0 | App cannot build, run, or a critical production flow is broken |
+| P1 | Important user-facing bug, release blocker, data integrity issue |
+| P2 | Refactor, cleanup, maintainability, non-blocking improvement |
+| P3 | Nice-to-have |
 
-Sprint "bitti" sayılır:
-- [ ] Tüm P0 ve P1 task'lar `done`
-- [ ] `report.md` yazıldı
-- [ ] Tamamlanmayan P2'ler backlog'a taşındı
-- [ ] `git commit` atıldı
+Execution order:
 
----
+- P0 before P1.
+- P1 before P2 unless user says otherwise.
+- P2 cannot destabilize release-critical flows.
 
-## 8. Backlog Politikası
+## 5. Task Format
 
-- `sprints/backlog.md` tek backlog kaynağıdır.
-- Sprint sırasında ortaya çıkan yeni işler backlog'a eklenir, sprint scope'una giremez.
-- Backlog önceliklendirmesi sprint başında yapılır.
+Every task in `tasks.md` must include:
+
+```markdown
+### T-XX - Title
+- Backlog ref: B-XXX or `none`
+- Owner: `agent-name`
+- Priority: P0/P1/P2/P3
+- Status: todo/in-progress/done/blocked
+- Dependencies: T-XX or `none`
+- Files:
+  - `path/to/file`
+- Acceptance:
+  - [ ] Concrete observable result
+- Verification:
+  - [ ] Command or manual validation
+```
+
+Allowed statuses:
+
+- `todo`
+- `in-progress`
+- `done`
+- `blocked`
+- `deferred`
+
+Only one task should be `in-progress` at a time unless tasks are independent and explicitly parallel.
+
+## 6. Ownership Boundaries
+
+Use these owners:
+
+| Owner | Scope |
+|---|---|
+| `core-engine` | Pure C# gameplay rules |
+| `persistence` | Save/load, migrations, data models |
+| `ui-layout` | Unity UI, scenes, responsive layout |
+| `input` | Drag, touch, placement |
+| `audio` | Music, SFX, audio routing |
+| `meta` | Leaderboard, Firebase social, missions, achievements |
+| `monetization` | Ads, rewarded flow, IAP, economy |
+| `build-release` | Build settings, Gradle, store, release |
+
+Cross-owner changes require a lead owner in `brief.md`.
+
+## 7. Verification Matrix
+
+Default commands:
+
+```powershell
+dotnet build Assembly-CSharp.csproj -v:minimal
+dotnet build BlockPuzzleUnityAdapter.csproj -v:minimal
+dotnet test Tests\BlockPuzzle.Core.Tests\BlockPuzzle.Core.Tests.csproj -v:minimal
+git diff --check
+```
+
+Minimum expectations:
+
+- Core changes: run core tests.
+- Unity adapter/UI changes: run `Assembly-CSharp` build.
+- Ads/Firebase/build changes: run adapter build and relevant config search.
+- Scene edits: run missing script search with `rg "m_Script: \{fileID: 0\}" Assets\Scenes Assets\Prefabs`.
+
+## 8. Done Criteria
+
+A task is `done` when:
+
+- Acceptance criteria pass.
+- Required verification is recorded.
+- No known P0/P1 regression is hidden.
+- Any follow-up work is added to backlog.
+
+A sprint is `done` when:
+
+- All P0/P1 tasks are `done` or explicitly deferred by the user.
+- `report.md` contains verification evidence.
+- Unfinished work is moved to backlog.
+- The active sprint can be moved to `sprints/archive/`.
+
+## 9. Git Policy
+
+- Do not commit unless the user explicitly asks.
+- Do not rewrite history.
+- Do not revert unrelated dirty files.
+- Mention dirty worktree risks in sprint report when relevant.

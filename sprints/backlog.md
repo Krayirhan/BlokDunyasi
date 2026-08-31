@@ -1,129 +1,163 @@
 # Backlog
 
-Tüm bekleyen işlerin tek kaynağı. Sprint planlanırken buradan seçilir.
+All pending sprint-sized work lives here. Sprint planning pulls from this file.
 
-Öncelik: 🔴 P0 | 🟠 P1 | 🟡 P2
+Priority: P0 blocker, P1 important, P2 improvement, P3 nice-to-have.
 
----
+## P0 - Blockers
 
-## 🔴 P0 — Blokörler
+### ~~B-001 - Audio playback disabled in production~~ ✓ DONE
+- `disableMusicPlayback` / `disableSfxPlayback` → `false` in both code and `MainMenu.unity` serialized data.
 
-### B-001 — disableMusicPlayback production'da kapalı
-- Agent: `audio`
-- Etkilenen: `Assets/Scripts/UnityAdapter/Audio/AudioManager.cs`
-- Kabul kriteri: Production build'de müzik çalışıyor, flag kaldırıldı veya false yapıldı
+### ~~B-002 - Rewarded ad continue mechanism~~ ✓ DONE
+- Created `Assets/Scripts/UI/Ads/RewardedAdBridge.cs` — static bridge wiring `AdMobManager` → `ContinueEconomyManager`.
 
-### B-002 — Ödüllü reklam reward mekanizması eksik
-- Agent: `monetization`
-- Etkilenen: `Assets/Scripts/UnityAdapter/Monetization/ContinueEconomyManager.cs`
-- Kabul kriteri: Reklam izlenince oyun devam ediyor, fail durumunda fallback çalışıyor
+## P1 - Important Work
 
----
+### B-003 - Split GameBootstrap god object *(IN PROGRESS — extraction wave 1 completed)*
+- Owner: `ui-layout`, `persistence`, `core-engine`
+- Files:
+  - `Assets/Scripts/UnityAdapter/Boot/GameBootstrap.cs`
+- Progress: `TutorialService`, `AnalyticsTelemetryService` and `VisualBackgroundManager` are extracted. Remaining bootstrap responsibilities are still in scope.
+- Acceptance: All remaining responsibilities are extracted without changing gameplay behavior.
 
-## 🟠 P1 — Önemli İşler
+### B-004 - Split NewDragSystem
+- Owner: `input`
+- Files:
+  - `Assets/Scripts/UnityAdapter/Input/NewDragSystem.cs`
+- Acceptance: Drag/drop behavior remains unchanged; input, visual and placement responsibilities are separated.
 
-### B-003 — GameBootstrap.cs God Object bölünmesi
-- Agent: `ui-layout` (lead), `persistence`, `core-engine`
-- Etkilenen: `Assets/Scripts/UnityAdapter/Boot/GameBootstrap.cs` (1674 satır)
-- Hedef bölünme:
-  - `GameOrchestrator.cs` — oyun akışı
-  - `GameTelemetryCollector.cs` — analytics event
-  - `GameSaveCoordinator.cs` — save/load koordinasyonu
-- Kabul kriteri: Her yeni sınıf <400 satır, mevcut oynanış değişmeden çalışıyor
+### B-005 - Move NewBlockTray hardcoded positions to profiles
+- Owner: `input`, `ui-layout`
+- Files:
+  - `Assets/Scripts/UnityAdapter/Blocks/NewBlockTray.cs`
+- Acceptance: Tray position and scale values come from layout/profile data.
 
-### B-004 — NewDragSystem.cs bölünmesi
-- Agent: `input`
-- Etkilenen: `Assets/Scripts/UnityAdapter/Input/NewDragSystem.cs` (817 satır)
-- Hedef bölünme:
-  - `InputEventRouter.cs` — touch/mouse olayları
-  - `DragVisualizer.cs` — ghost preview
-  - `PlacementResolver.cs` — anchor + validation
-- Kabul kriteri: Drag-drop oynanışı aynı, test edilebilirlik arttı
+### B-006 - Move ScreenLayoutManager hardcoded layout values to config
+- Owner: `ui-layout`
+- Files:
+  - `Assets/Scripts/UnityAdapter/Boot/ScreenLayoutManager.cs`
+- Acceptance: Header, tray, middle gap and footer spacing come from profile/config.
 
-### B-005 — NewBlockTray hardcoded pozisyonları profil sistemine taşı
-- Agent: `input`, `ui-layout`
-- Etkilenen: `Assets/Scripts/UnityAdapter/Blocks/NewBlockTray.cs`
-- Değerler: `slotPositions [(-2.5,-4)(0,-4)(2.5,-4)]`, `trayBlockScale=0.7f`, `trayGapFromGrid=0.4f`
-- Kabul kriteri: Pozisyonlar DeviceLayoutProfile'dan okunuyor, 3 aspect ratio'da test geçti
+### B-007 - Move GameBootstrap camera parameters to profile/config
+- Owner: `ui-layout`
+- Files:
+  - `Assets/Scripts/UnityAdapter/Boot/GameBootstrap.cs`
+- Acceptance: Camera position and adaptive size values are configurable.
 
-### B-006 — ScreenLayoutManager hardcoded layout değerleri
-- Agent: `ui-layout`
-- Etkilenen: `ScreenLayoutManager.cs`
-- Değerler: `headerSpace=2.8f`, `traySpace=4.2f`, `middleGap=0.8f`, `footerSpace=0.8f`
-- Kabul kriteri: Tüm değerler DeviceLayoutProfile'dan okunuyor
+### B-008 - Deploy safe area to main scenes
+- Owner: `ui-layout`
+- Files:
+  - `Assets/Scenes/MainMenu.unity`
+  - `Assets/Scenes/OyunEkranı.unity`
+  - `Assets/Scenes/Scores.unity`
+- Acceptance: All main scenes have safe-area root/fitter and standard canvas scaling.
 
-### B-007 — GameBootstrap.cs hardcoded kamera parametreleri
-- Agent: `ui-layout`
-- Etkilenen: `Assets/Scripts/UnityAdapter/Boot/GameBootstrap.cs`
-- Değerler: `cameraPosition=(0,0,-10)`, `minAdaptiveCameraSize=6f`, `maxAdaptiveCameraSize=14f`
-- Kabul kriteri: Kamera parametreleri DeviceLayoutProfile'dan okunuyor
+### B-009 - Split MainMenuController
+- Owner: `ui-layout`
+- Files:
+  - `Assets/Scripts/UnityAdapter/UI/MainMenuController.cs`
+- Acceptance: Responsibilities are separated while preserving backward compatibility.
 
-### B-008 — Safe area 3 sahnede deploy edilmedi
-- Agent: `ui-layout`
-- Etkilenen: `MainMenu.unity`, `OyunEkranı.unity`, `Scores.unity`
-- Kod hazır: `SafeAreaFitter.cs`, `SafeAreaRootSetup.cs`, `CanvasScalerConfig.cs`
-- Kabul kriteri: 3 sahnede `__SafeAreaRoot` + SafeAreaFitter mevcut, Canvas Scaler 1080×1920 / 0.5
+### B-010 - Save data anti-cheat hook
+- Owner: `persistence`, `meta`
+- Files:
+  - `Assets/Scripts/UnityAdapter/Social/ScoreValidator.cs`
+  - `Assets/Scripts/Core/Persistence/GameData.cs`
+- Acceptance: Loaded score data is validated through score validation rules.
 
-### B-009 — MainMenuController.cs bölünmesi (1564 satır)
-- Agent: `ui-layout`
-- Etkilenen: `Assets/Scripts/UnityAdapter/UI/MainMenuController.cs`
-- Kabul kriteri: Sorumluluklar ayrıldı, backward compat korundu
+### B-028 - Leaderboard must be Firebase-only
+- Owner: `meta`
+- Files:
+  - `Assets/Scripts/UnityAdapter/UI/HighScoreTableView.cs`
+  - `Assets/Scripts/UnityAdapter/Social/LeaderboardManager.cs`
+  - `Assets/Scripts/UnityAdapter/Social/FirebaseManager.cs`
+- Acceptance: Leaderboard reads and writes use only Firestore-backed fields; no local override/mock data or synthesized public rows are shown.
 
-### B-010 — Save data anti-cheat hook
-- Agent: `persistence`, `meta`
-- Etkilenen: `ScoreValidator.cs`, `GameData.cs`
-- Kabul kriteri: Save yüklenirken skor ScoreValidator'dan geçiyor
+### B-029 - Complete iOS AdMob release configuration
+- Owner: `build-release`, `monetization`
+- Files:
+  - `Assets/GoogleMobileAds/Resources/GoogleMobileAdsSettings.asset`
+  - `Assets/Resources/AdMobRuntimeConfig.asset`
+- Acceptance: iOS App ID and banner/interstitial/rewarded production unit IDs are supplied from the AdMob console and verified in an iOS development build.
 
----
+## P2 - Improvements
 
-## 🟡 P2 — İyileştirmeler
+### B-024 - Extract GameOver scene navigation
+- Owner: `ui-layout`
+- Files:
+  - `Assets/Scripts/UnityAdapter/UI/GameOverView.cs`
+- Acceptance: Restart, main-menu and optional dedicated GameOver scene routing live behind a focused navigation service without changing user-visible flow.
 
-### B-011 — BlockSpawner.cs magic number'ları sabitler haline getir
-- Agent: `core-engine`
-- Etkilenen: `Assets/Scripts/Core/RNG/BlockSpawner.cs`
-- Değerler: `0.18f`, `0.6f`, `0.55f` ve diğerleri
-- Kabul kriteri: Tüm threshold'lar const veya config ile tanımlı
+### ~~B-025 - Extract GameOver continue-offer state machine~~ ✓ DONE
+- Owner: `monetization`, `ui-layout`
+- Files:
+  - `Assets/Scripts/UnityAdapter/UI/GameOverView.cs`
+- Completed by `Assets/Scripts/UnityAdapter/UI/ContinueOfferController.cs`; Unity script compilation passed on 2026-07-22. Manual rewarded-ad device smoke test remains recommended.
 
-### B-012 — DifficultyModel CircularBuffer ayrı dosyaya taşı
-- Agent: `core-engine`
-- Etkilened: `Assets/Scripts/Core/RNG/DifficultyModel.cs`
-- Kabul kriteri: `CircularBuffer<T>` kendi dosyasında, DifficultyModel referans ediyor
+### B-026 - Extract GameOver localization/messages
+- Owner: `ui-layout`
+- Files:
+  - `Assets/Scripts/UnityAdapter/UI/GameOverView.cs`
+- Acceptance: GameOver labels, guidance text and continue-offer messages come from a dedicated message provider.
 
-### B-013 — GameEngine.cs ExecuteMove() refactor
-- Agent: `core-engine`
-- Etkilened: `Assets/Scripts/Core/Engine/GameEngine.cs`
-- Sorun: ExecuteMove() 102 satır
-- Kabul kriteri: ExecuteMove() <40 satır, private helper'lara bölündü
+### B-027 - Extract GameOver final VFX
+- Owner: `ui-layout`
+- Files:
+  - `Assets/Scripts/UnityAdapter/UI/GameOverView.cs`
+- Acceptance: Board explosion timing, burst selection and particle spawning move behind a focused VFX component with the same visual behavior.
 
-### B-014 — GameData.cs migration logic ayrı sınıfa
-- Agent: `persistence`
-- Etkilened: `Assets/Scripts/Core/Persistence/GameData.cs`
-- Kabul kriteri: `GameDataMigrator.cs` ayrı dosya, migration chain testlenebilir
+### B-011 - Convert BlockSpawner magic numbers to constants/config
+- Owner: `core-engine`
+- Files:
+  - `Assets/Scripts/Core/RNG/BlockSpawner.cs`
+- Acceptance: Thresholds are named constants or config values.
 
-### B-015 — LineDetector.cs redundant double-check kaldır
-- Agent: `core-engine`
-- Etkilened: `Assets/Scripts/Core/Board/LineDetector.cs` satır 77-78, 91-92
-- Kabul kriteri: Tek geçişte doğrulama, O(n) korunuyor
+### B-012 - Move DifficultyModel CircularBuffer to separate file
+- Owner: `core-engine`
+- Files:
+  - `Assets/Scripts/Core/RNG/DifficultyModel.cs`
+- Acceptance: `CircularBuffer<T>` is its own file and DifficultyModel uses it.
 
-### B-016 — İkinci GameBootstrap sınıfını yeniden adlandır
-- Agent: `build-release`
-- Etkilened: `Assets/Scripts/Systems/GameBootstrap.cs`
-- Sorun: `BlockPuzzle.UnityAdapter.Boot.GameBootstrap` ile isim çakışması
-- Kabul kriteri: `Assets/Scripts/Systems/AppStartup.cs` olarak yeniden adlandırıldı
+### B-013 - Refactor GameEngine ExecuteMove
+- Owner: `core-engine`
+- Files:
+  - `Assets/Scripts/Core/Engine/GameEngine.cs`
+- Acceptance: `ExecuteMove()` is shorter and split into focused private helpers.
 
-### B-017 — .gitignore'a build artefact'leri ekle
-- Agent: `build-release`
-- Etkilened: `.gitignore`
-- Kabul kriteri: `*.apk`, `*.aab`, `build*.log`, `analytics_build.binlog`, `user.keystore` ignore listesinde
+### B-014 - Move GameData migration logic to separate class
+- Owner: `persistence`
+- Files:
+  - `Assets/Scripts/Core/Persistence/GameData.cs`
+- Acceptance: Migration chain is testable through a dedicated migrator.
 
-### B-018 — Uzun telefon desteği (9:20+ aspect ratio)
-- Agent: `ui-layout`
-- Etkilened: DeviceLayoutProfile assets, ScreenLayoutManager
-- Profiller: `PhoneTall_9_21` ve `Phone_9_20` güncellenmeli
-- Kabul kriteri: Samsung S24 Ultra'da board/tray çakışması yok
+### B-015 - Remove redundant LineDetector double-checks
+- Owner: `core-engine`
+- Files:
+  - `Assets/Scripts/Core/Board/LineDetector.cs`
+- Acceptance: Validation stays O(n) and duplicate checks are removed.
 
-### B-019 — Ghost preview görünümü iyileştirme
-- Agent: `input`, `ui-layout`
-- Etkilened: `SimpleGridView.cs`, ghost overlay sistemi
-- Sorun: Ghost preview siyah/çirkin görünüyor
-- Kabul kriteri: Theme'e uygun yarı saydam ghost overlay
+### B-016 - Rename duplicate Systems/GameBootstrap
+- Owner: `build-release`
+- Files:
+  - `Assets/Scripts/Systems/GameBootstrap.cs`
+- Acceptance: Startup class no longer conflicts conceptually with `UnityAdapter.Boot.GameBootstrap`.
+
+### B-017 - Ignore build artifacts
+- Owner: `build-release`
+- Files:
+  - `.gitignore`
+- Acceptance: Build outputs, logs and local keystore files are ignored.
+
+### B-018 - Support tall phones 9:20+
+- Owner: `ui-layout`
+- Files:
+  - `DeviceLayoutProfile` assets
+  - `Assets/Scripts/UnityAdapter/Boot/ScreenLayoutManager.cs`
+- Acceptance: Tall phone profile avoids board/tray overlap.
+
+### B-019 - Improve ghost preview visuals
+- Owner: `input`, `ui-layout`
+- Files:
+  - `Assets/Scripts/UnityAdapter/Grid/SimpleGridView.cs`
+- Acceptance: Ghost preview uses theme-compatible translucent visuals.
